@@ -1,0 +1,88 @@
+# ============================================================================
+# Aigent Universal Clinic Template - Git Ignore Rules
+# ============================================================================
+
+# NEVER commit actual environment files (contains secrets)
+.env
+.env.local
+.env.production
+*.env
+!.env.*_example
+
+# Node modules (if using n8n locally)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# n8n data (if running local instance)
+.n8n/
+*.db
+*.sqlite
+
+# Credentials (NEVER commit)
+*credentials*
+*secret*
+*password*
+*api_key*
+*token*
+!*_example
+
+# Operating System
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+*_backup.json
+
+# Test data (may contain PHI)
+test_data/
+sample_data/
+*_test.json
+*_sample.json
+
+# Build outputs
+dist/
+build/
+out/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# ============================================================================
+# IMPORTANT: What IS tracked:
+# - workflow_*.json (production workflows)
+# - .env.*_example (templates without secrets)
+# - *.md (documentation)
+# - CROSS_MODULE_ANALYSIS.md
+# - Aigent_Module_*_README.md (reference documentation)
+# - Aigent_Module_*.json (original workflows - reference only)
+# ============================================================================

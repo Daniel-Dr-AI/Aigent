@@ -1,0 +1,1183 @@
+{
+  "name": "Aigent Module 08 - Messaging & Omnichannel Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aigent-message-hub",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
+        }
+      },
+      "id": "801",
+      "name": "Webhook - Unified Message Receiver",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 400],
+      "webhookId": "{{$env.WEBHOOK_ID_MODULE_08}}",
+      "notes": "Primary entry point for all inbound messages from any channel"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize inbound message from various channel formats\nconst input = $input.item.json;\nconst body = input.body || input;\nconst traceId = `MSG-${Date.now()}`;\n\nlet normalized = {\n  trace_id: traceId,\n  channel: 'unknown',\n  direction: 'inbound',\n  from: null,\n  to: null,\n  message: null,\n  timestamp: new Date().toISOString(),\n  attachments: [],\n  metadata: {}\n};\n\n// Detect channel and normalize\nif (body.From && body.Body && body.MessageSid) {\n  // Twilio SMS/WhatsApp\n  normalized.channel = body.From.startsWith('whatsapp:') ? 'whatsapp' : 'sms';\n  normalized.from = body.From.replace('whatsapp:', '');\n  normalized.to = body.To?.replace('whatsapp:', '');\n  normalized.message = body.Body;\n  normalized.metadata.message_sid = body.MessageSid;\n  normalized.metadata.num_media = parseInt(body.NumMedia || 0);\n}\nelse if (body.message && body.message.chat) {\n  // Telegram\n  normalized.channel = 'telegram';\n  normalized.from = body.message.from.id.toString();\n  normalized.message = body.message.text;\n  normalized.timestamp = new Date(body.message.date * 1000).toISOString();\n  normalized.metadata.chat_id = body.message.chat.id;\n  normalized.metadata.username = body.message.from.username;\n}\nelse if (body.from && body.text && body.html) {\n  // SendGrid Inbound Parse (Email)\n  normalized.channel = 'email';\n  normalized.from = body.from;\n  normalized.to = body.to;\n  normalized.message = body.text;\n  normalized.metadata.subject = body.subject;\n  normalized.metadata.attachments_count = body.attachments || 0;\n}\nelse if (body.channel && body.message) {\n  // Pre-normalized (webchat, custom integrations)\n  normalized = { ...normalized, ...body, trace_id: traceId };\n}\nelse {\n  // Unknown format\n  normalized.message = JSON.stringify(body);\n  normalized.metadata.raw_payload = body;\n}\n\n// Extract patient identifier from message or metadata\nconst patientIdPatterns = [\n  /patient[_\\s]?id[:\\s]*(\\w+)/i,\n  /id[:\\s]*(\\d{4,})/i\n];\n\nfor (const pattern of patientIdPatterns) {\n  const match = normalized.message?.match(pattern);\n  if (match) {\n    normalized.metadata.patient_id = match[1];\n    break;\n  }\n}\n\nif (body.metadata?.contact_id) {\n  normalized.metadata.contact_id = body.metadata.contact_id;\n}\n\nreturn { json: normalized };"
+      },
+      "id": "802",
+      "name": "Normalize Message Format",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 400],
+      "notes": "Convert channel-specific payloads to unified schema"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.channel}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.from}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.message}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "803",
+      "name": "Validate Message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 400],
+      "notes": "Ensure required fields present"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": false, \"error\": \"Invalid message format\", \"trace_id\": \"{{$json.trace_id}}\"}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "804",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 550],
+      "notes": "Return 400 error for invalid messages"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract keywords and classify message intent\nconst message = ($json.message || '').toLowerCase();\nconst keywords = {\n  booking: ['appointment', 'schedule', 'reschedule', 'book', 'cancel', 'change time'],\n  billing: ['payment', 'bill', 'invoice', 'charge', 'cost', 'price'],\n  urgent: ['emergency', 'urgent', 'asap', 'pain', 'severe', 'help'],\n  support: ['question', 'help', 'how', 'what', 'why'],\n  general: []\n};\n\nlet intent = 'general';\nlet priority = 'normal';\n\nfor (const [category, keywordList] of Object.entries(keywords)) {\n  if (keywordList.some(kw => message.includes(kw))) {\n    intent = category;\n    break;\n  }\n}\n\nif (intent === 'urgent' || message.includes('emergency')) {\n  priority = 'urgent';\n}\n\n// Check if after hours\nconst now = new Date();\nconst hour = now.getHours();\nconst isWeekend = now.getDay() === 0 || now.getDay() === 6;\nconst businessHoursStart = parseInt($env.BUSINESS_HOURS_START || 8);\nconst businessHoursEnd = parseInt($env.BUSINESS_HOURS_END || 18);\n\nconst isAfterHours = hour < businessHoursStart || hour >= businessHoursEnd || isWeekend;\n\nreturn {\n  json: {\n    ...$json,\n    classification: {\n      intent: intent,\n      priority: priority,\n      keywords_matched: keywords[intent] || [],\n      after_hours: isAfterHours\n    }\n  }\n};"
+      },
+      "id": "805",
+      "name": "Classify Message Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400],
+      "notes": "Detect intent, priority, and business hours"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.from}}",
+              "operation": "regex",
+              "value2": "={{$env.TEST_PHONE_PATTERN || '^\\\\+1555'}}"
+            }
+          ]
+        }
+      },
+      "id": "806",
+      "name": "Check If Test Message",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "notes": "Filter out test/demo messages"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "contact",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 1,
+        "filters": {
+          "properties": [
+            {
+              "propertyName": "phone",
+              "operator": "eq",
+              "value": "={{$json.from}}"
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "807",
+      "name": "Lookup Contact in CRM",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "notes": "Find existing contact by phone/email",
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "{{$env.HUBSPOT_CREDENTIAL_ID}}",
+          "name": "HubSpot OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.id !== undefined}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "808",
+      "name": "Check If Contact Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "notes": "Determine if contact found in CRM"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "contact",
+        "operation": "create",
+        "properties": {
+          "property": [
+            {
+              "name": "phone",
+              "value": "={{$node[\"Classify Message Intent\"].json.from}}"
+            },
+            {
+              "name": "firstname",
+              "value": "New"
+            },
+            {
+              "name": "lastname",
+              "value": "Contact"
+            },
+            {
+              "name": "lifecyclestage",
+              "value": "lead"
+            },
+            {
+              "name": "lead_source",
+              "value": "{{$node[\"Classify Message Intent\"].json.channel}}"
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "809",
+      "name": "Create New Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1650, 400],
+      "notes": "Create contact if not found",
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "{{$env.HUBSPOT_CREDENTIAL_ID}}",
+          "name": "HubSpot OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge contact data with message\nconst message = $node[\"Classify Message Intent\"].json;\nconst contact = $json;\n\nreturn {\n  json: {\n    ...message,\n    contact: {\n      id: contact.id,\n      email: contact.properties?.email,\n      name: `${contact.properties?.firstname || ''} ${contact.properties?.lastname || ''}`.trim(),\n      phone: contact.properties?.phone,\n      lifecycle_stage: contact.properties?.lifecyclestage\n    }\n  }\n};"
+      },
+      "id": "810",
+      "name": "Merge Contact Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 350],
+      "notes": "Combine message with contact info"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.classification.priority}}",
+              "value2": "urgent"
+            }
+          ]
+        }
+      },
+      "id": "811",
+      "name": "Check If Urgent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2050, 350],
+      "notes": "Route urgent messages immediately to staff"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "🚨 URGENT MESSAGE from {{$json.contact.name || $json.from}}\\nChannel: {{$json.channel}}\\nMessage: {{$json.message}}\\nTrace ID: {{$json.trace_id}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$env.SLACK_URGENT_CHANNEL || '#urgent'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "812",
+      "name": "Send Urgent Alert to Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2250, 250],
+      "notes": "Notify staff of urgent messages",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.classification.after_hours}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "813",
+      "name": "Check If After Hours",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2050, 450],
+      "notes": "Check business hours"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate after-hours auto-response\nconst clinicName = $env.BRAND_NAME || 'Our Clinic';\nconst businessHoursStart = $env.BUSINESS_HOURS_START || 8;\nconst businessHoursEnd = $env.BUSINESS_HOURS_END || 18;\n\nconst response = {\n  message: `Thank you for contacting ${clinicName}. Our office hours are ${businessHoursStart} AM - ${businessHoursEnd} PM, Monday-Friday. We'll respond to your message during business hours. For medical emergencies, please call 911.`,\n  auto_response: true,\n  response_type: 'after_hours'\n};\n\nreturn {\n  json: {\n    ...$json,\n    response: response\n  }\n};"
+      },
+      "id": "814",
+      "name": "Generate After-Hours Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 500],
+      "notes": "Create auto-reply for after-hours"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$env.AIGENT_BOT_ENABLED === 'true'}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "815",
+      "name": "Check If AIgent Bot Enabled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2450, 350],
+      "notes": "Route to AI bot if enabled"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.AIGENT_BOT_ENDPOINT}}",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.AIGENT_BOT_API_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{$json.message}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$json.from}}"
+            },
+            {
+              "name": "contact",
+              "value": "={{JSON.stringify($json.contact)}}"
+            },
+            {
+              "name": "intent",
+              "value": "={{$json.classification.intent}}"
+            },
+            {
+              "name": "context",
+              "value": "={{JSON.stringify($json.metadata)}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "816",
+      "name": "Call AIgent Bot API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2650, 300],
+      "notes": "Send message to AI bot for intelligent response",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract bot response\nconst botResponse = $json;\nconst originalMessage = $node[\"Merge Contact Data\"].json;\n\nlet response = {\n  message: 'Thank you for your message. A team member will respond shortly.',\n  auto_response: false,\n  response_type: 'default'\n};\n\nif (botResponse.response && botResponse.response.text) {\n  response = {\n    message: botResponse.response.text,\n    auto_response: true,\n    response_type: 'aigent_bot',\n    confidence: botResponse.response.confidence || 0.9\n  };\n}\n\nreturn {\n  json: {\n    ...originalMessage,\n    response: response\n  }\n};"
+      },
+      "id": "817",
+      "name": "Process Bot Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2850, 300],
+      "notes": "Extract and format bot response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Default human response template\nconst clinicName = $env.BRAND_NAME || 'Our Clinic';\n\nconst response = {\n  message: `Thank you for contacting ${clinicName}. A team member will respond to your message shortly.`,\n  auto_response: false,\n  response_type: 'manual_required'\n};\n\nreturn {\n  json: {\n    ...$json,\n    response: response\n  }\n};"
+      },
+      "id": "818",
+      "name": "Generate Default Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2650, 400],
+      "notes": "Fallback response if bot disabled"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.channel}}",
+              "value2": "sms"
+            }
+          ]
+        }
+      },
+      "id": "819",
+      "name": "Switch: SMS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3050, 250],
+      "notes": "Route to SMS sender"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.channel}}",
+              "value2": "whatsapp"
+            }
+          ]
+        }
+      },
+      "id": "820",
+      "name": "Switch: WhatsApp",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3050, 350],
+      "notes": "Route to WhatsApp sender"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.channel}}",
+              "value2": "email"
+            }
+          ]
+        }
+      },
+      "id": "821",
+      "name": "Switch: Email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3050, 450],
+      "notes": "Route to email sender"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_ACCOUNT_SID}}/Messages.json",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{$json.from}}"
+            },
+            {
+              "name": "From",
+              "value": "={{$env.TWILIO_FROM_NUMBER}}"
+            },
+            {
+              "name": "Body",
+              "value": "={{$json.response.message}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "822",
+      "name": "Send SMS via Twilio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3250, 200],
+      "notes": "Send outbound SMS",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "{{$env.TWILIO_CREDENTIAL_ID}}",
+          "name": "Twilio Basic Auth"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_ACCOUNT_SID}}/Messages.json",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "whatsapp:{{$json.from}}"
+            },
+            {
+              "name": "From",
+              "value": "whatsapp:{{$env.TWILIO_WHATSAPP_NUMBER}}"
+            },
+            {
+              "name": "Body",
+              "value": "={{$json.response.message}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "823",
+      "name": "Send WhatsApp via Twilio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3250, 300],
+      "notes": "Send outbound WhatsApp message",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "{{$env.TWILIO_CREDENTIAL_ID}}",
+          "name": "Twilio Basic Auth"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.EMAIL_FROM || 'noreply@yourclinic.com'}}",
+        "toEmail": "={{$json.from}}",
+        "subject": "Re: Your message to {{$env.BRAND_NAME || 'Our Clinic'}}",
+        "emailType": "text",
+        "message": "={{$json.response.message}}",
+        "options": {}
+      },
+      "id": "824",
+      "name": "Send Email Reply",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3250, 400],
+      "notes": "Send outbound email",
+      "credentials": {
+        "smtp": {
+          "id": "{{$env.SMTP_CREDENTIAL_ID}}",
+          "name": "SMTP Account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "contact",
+        "operation": "update",
+        "contactId": "={{$json.contact.id}}",
+        "updateFields": {
+          "properties": {
+            "property": [
+              {
+                "name": "last_message_date",
+                "value": "={{$json.timestamp}}"
+              },
+              {
+                "name": "last_message_channel",
+                "value": "={{$json.channel}}"
+              },
+              {
+                "name": "last_message_content",
+                "value": "={{$json.message.substring(0, 200)}}"
+              },
+              {
+                "name": "total_messages",
+                "value": "={{($json.contact.total_messages || 0) + 1}}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "825",
+      "name": "Update CRM Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [3450, 350],
+      "notes": "Update contact with latest message info",
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "{{$env.HUBSPOT_CREDENTIAL_ID}}",
+          "name": "HubSpot OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.SHEET_MESSAGES_TAB || 'Messages'}}",
+        "columns": {
+          "mappings": [
+            {
+              "column": "Timestamp",
+              "value": "={{$json.timestamp}}"
+            },
+            {
+              "column": "Trace ID",
+              "value": "={{$json.trace_id}}"
+            },
+            {
+              "column": "Direction",
+              "value": "={{$json.direction}}"
+            },
+            {
+              "column": "Channel",
+              "value": "={{$json.channel}}"
+            },
+            {
+              "column": "From",
+              "value": "={{$json.from}}"
+            },
+            {
+              "column": "To",
+              "value": "={{$json.to}}"
+            },
+            {
+              "column": "Contact Name",
+              "value": "={{$json.contact?.name || 'Unknown'}}"
+            },
+            {
+              "column": "Contact ID",
+              "value": "={{$json.contact?.id || ''}}"
+            },
+            {
+              "column": "Message",
+              "value": "={{$json.message}}"
+            },
+            {
+              "column": "Intent",
+              "value": "={{$json.classification?.intent}}"
+            },
+            {
+              "column": "Priority",
+              "value": "={{$json.classification?.priority}}"
+            },
+            {
+              "column": "Response",
+              "value": "={{$json.response?.message || ''}}"
+            },
+            {
+              "column": "Response Type",
+              "value": "={{$json.response?.response_type || ''}}"
+            },
+            {
+              "column": "After Hours",
+              "value": "={{$json.classification?.after_hours}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "826",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [3650, 350],
+      "notes": "Append message to conversation log",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$env.STAFF_NOTIFICATION_ENABLED === 'true' && !$json.response?.auto_response}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "827",
+      "name": "Check If Staff Notification Needed",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3850, 350],
+      "notes": "Notify staff of manual response needed"
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "💬 New message from {{$json.contact.name || $json.from}}\\nChannel: {{$json.channel}}\\nIntent: {{$json.classification.intent}}\\nMessage: {{$json.message}}\\nAuto-response sent: {{$json.response.auto_response}}\\nReply via: {{$env.STAFF_DASHBOARD_URL || 'Dashboard'}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$env.SLACK_MESSAGES_CHANNEL || '#messages'}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "828",
+      "name": "Notify Staff on Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4050, 300],
+      "notes": "Send notification to staff channel",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build final message_log.json output\nconst data = $json;\n\nconst output = {\n  success: true,\n  trace_id: data.trace_id,\n  message_log: {\n    direction: data.direction,\n    channel: data.channel,\n    from: data.from,\n    to: data.to,\n    timestamp: data.timestamp,\n    message: data.message,\n    response: data.response?.message || null,\n    response_type: data.response?.response_type || null,\n    auto_response: data.response?.auto_response || false\n  },\n  contact: {\n    id: data.contact?.id,\n    name: data.contact?.name,\n    email: data.contact?.email\n  },\n  classification: {\n    intent: data.classification?.intent,\n    priority: data.classification?.priority,\n    after_hours: data.classification?.after_hours\n  },\n  metadata: {\n    logged_to_crm: true,\n    logged_to_datastore: true,\n    staff_notified: $env.STAFF_NOTIFICATION_ENABLED === 'true',\n    processed_at: new Date().toISOString()\n  }\n};\n\nreturn { json: output };"
+      },
+      "id": "829",
+      "name": "Build message_log.json",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4050, 400],
+      "notes": "Construct standardized output"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "830",
+      "name": "Return message_log.json",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [4250, 400],
+      "notes": "Return standardized message log"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handler\nconst error = $input.item.json.error || 'Unknown error occurred';\nconst stage = $input.item.json.stage || 'unknown';\nconst traceId = $input.item.json.trace_id || `ERR-${Date.now()}`;\n\nconst errorResponse = {\n  success: false,\n  error: error.message || error,\n  stage: stage,\n  trace_id: traceId,\n  timestamp: new Date().toISOString()\n};\n\nif ($env.DEBUG_MODE === 'true') {\n  console.error('Module 08 Error:', JSON.stringify(errorResponse, null, 2));\n}\n\nreturn { json: errorResponse };"
+      },
+      "id": "831",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3050, 650],
+      "notes": "Catch and format errors"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "832",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3250, 650],
+      "notes": "Return error JSON with 500 status"
+    }
+  ],
+  "connections": {
+    "Webhook - Unified Message Receiver": {
+      "main": [
+        [
+          {
+            "node": "Normalize Message Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Message Format": {
+      "main": [
+        [
+          {
+            "node": "Validate Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Message": {
+      "main": [
+        [
+          {
+            "node": "Classify Message Intent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Message Intent": {
+      "main": [
+        [
+          {
+            "node": "Check If Test Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Test Message": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Lookup Contact in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Contact in CRM": {
+      "main": [
+        [
+          {
+            "node": "Check If Contact Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Contact Exists": {
+      "main": [
+        [
+          {
+            "node": "Merge Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create New Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create New Contact": {
+      "main": [
+        [
+          {
+            "node": "Merge Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Contact Data": {
+      "main": [
+        [
+          {
+            "node": "Check If Urgent",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Check If After Hours",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Urgent": {
+      "main": [
+        [
+          {
+            "node": "Send Urgent Alert to Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Urgent Alert to Slack": {
+      "main": [
+        [
+          {
+            "node": "Check If AIgent Bot Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If After Hours": {
+      "main": [
+        [
+          {
+            "node": "Generate After-Hours Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check If AIgent Bot Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate After-Hours Response": {
+      "main": [
+        [
+          {
+            "node": "Switch: SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch: WhatsApp",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch: Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If AIgent Bot Enabled": {
+      "main": [
+        [
+          {
+            "node": "Call AIgent Bot API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Default Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call AIgent Bot API": {
+      "main": [
+        [
+          {
+            "node": "Process Bot Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Bot Response": {
+      "main": [
+        [
+          {
+            "node": "Switch: SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch: WhatsApp",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch: Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Default Response": {
+      "main": [
+        [
+          {
+            "node": "Switch: SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch: WhatsApp",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Switch: Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: SMS": {
+      "main": [
+        [
+          {
+            "node": "Send SMS via Twilio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Send WhatsApp via Twilio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch: Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS via Twilio": {
+      "main": [
+        [
+          {
+            "node": "Update CRM Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send WhatsApp via Twilio": {
+      "main": [
+        [
+          {
+            "node": "Update CRM Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Reply": {
+      "main": [
+        [
+          {
+            "node": "Update CRM Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update CRM Contact": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Check If Staff Notification Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Staff Notification Needed": {
+      "main": [
+        [
+          {
+            "node": "Notify Staff on Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build message_log.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Staff on Slack": {
+      "main": [
+        [
+          {
+            "node": "Build message_log.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build message_log.json": {
+      "main": [
+        [
+          {
+            "node": "Return message_log.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "{{$env.ERROR_WORKFLOW_ID}}"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-15T00:00:00.000Z",
+  "versionId": "1.0.0"
+}

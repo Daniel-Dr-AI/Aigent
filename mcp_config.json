@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@context7/mcp-server"
+      ],
+      "env": {
+        "CONTEXT7_API_KEY": "ctx7sk-98d3d005-a1e6-448e-b749-f6656be0c27d"
+      },
+      "description": "Context7 MCP server for enhanced context management and retrieval"
+    },
+    "serena": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide-assistant",
+        "--project",
+        "c:\\Users\\bluel\\Dropbox\\Daniels Docs\\Daniel\\Aigent"
+      ],
+      "description": "Serena MCP server - LSP-based semantic code analysis for 25+ languages"
+    }
+  }
+}

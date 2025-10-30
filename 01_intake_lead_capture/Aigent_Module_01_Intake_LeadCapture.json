@@ -1,0 +1,394 @@
+{
+  "name": "Aigent_Module_01_Intake_LeadCapture",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "intake-lead",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}",
+          "rawBody": false
+        }
+      },
+      "id": "webhook-trigger-001",
+      "name": "Webhook Trigger - Intake Form",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "{{$env.WEBHOOK_ID}}",
+      "notes": "PURPOSE: Accept incoming lead data from web forms, chatbots, or landing pages.\nINPUTS: JSON payload with name, email, phone, interest, referral_source.\nOUTPUTS: Parsed body as $json.\nCONFIG: Set ALLOWED_ORIGINS env var for CORS control."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validation-name",
+              "leftValue": "={{ $json.body.name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "validation-email",
+              "leftValue": "={{ $json.body.email }}",
+              "rightValue": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            },
+            {
+              "id": "validation-phone",
+              "leftValue": "={{ $json.body.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validation-node-002",
+      "name": "Validate Required Fields",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "PURPOSE: Enforce data quality by validating name, email (format), and phone presence.\nINPUTS: Webhook body fields.\nOUTPUTS: Routes to 'true' branch if valid, 'false' if invalid.\nVALIDATION: Email regex, non-empty checks on critical fields."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": \"Missing or invalid required fields: name, email, phone\", \"timestamp\": $now.toISO() } }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "error-response-003",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [650, 450],
+      "notes": "PURPOSE: Return 400 error to client when validation fails.\nINPUTS: Triggered by validation failure.\nOUTPUTS: HTTP 400 with error JSON.\nERROR HANDLING: Client-facing message, no PHI exposure."
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "email": "={{ $json.body.email }}",
+        "additionalFields": {
+          "firstname": "={{ $json.body.name.split(' ')[0] }}",
+          "lastname": "={{ $json.body.name.split(' ').slice(1).join(' ') || '' }}",
+          "phone": "={{ $json.body.phone }}",
+          "interest_area": "={{ $json.body.interest || 'General Inquiry' }}",
+          "lead_source": "={{ $json.body.referral_source || 'Direct' }}",
+          "hs_lead_status": "NEW",
+          "lifecycle_stage": "lead"
+        },
+        "options": {}
+      },
+      "id": "crm-upsert-004",
+      "name": "Upsert Contact to CRM",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "credentials": {
+        "hubspotApi": {
+          "id": "{{$env.HUBSPOT_CREDENTIAL_ID}}",
+          "name": "{{$env.HUBSPOT_CREDENTIAL_NAME}}"
+        }
+      },
+      "notes": "PURPOSE: Create or update contact record in HubSpot CRM (or alternate via credential swap).\nINPUTS: Validated lead data from webhook.\nOUTPUTS: HubSpot contact object with ID.\nCONFIG: Use env vars HUBSPOT_CREDENTIAL_ID and HUBSPOT_CREDENTIAL_NAME.\nALTERNATES: Swap node type for Salesforce, Zoho, or custom API."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-data-005",
+      "name": "Merge Webhook + CRM Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [850, 300],
+      "notes": "PURPOSE: Combine original webhook payload with CRM response (contact ID, timestamps).\nINPUTS: Webhook body + CRM upsert result.\nOUTPUTS: Unified JSON object for downstream nodes.\nUSE CASE: Enrich lead data with CRM identifiers for tracking."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=New Lead: {{ $json.body.name }} | {{ $json.body.email }} | {{ $json.body.phone }} | Interest: {{ $json.body.interest || 'Not specified' }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$env.NOTIFICATION_CHANNEL || '#leads'}}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "timeout": 5000
+        }
+      },
+      "id": "notification-006",
+      "name": "Send Internal Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1050, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{$env.NOTIFICATION_AUTH_CREDENTIAL_ID}}",
+          "name": "{{$env.NOTIFICATION_AUTH_CREDENTIAL_NAME}}"
+        }
+      },
+      "notes": "PURPOSE: Alert staff via Slack, Teams, or SMS (Twilio) about new lead.\nINPUTS: Merged lead + CRM data.\nOUTPUTS: Notification service response.\nCONFIG: Set NOTIFICATION_WEBHOOK_URL (Slack/Teams webhook) and optional NOTIFICATION_CHANNEL.\nALTERNATES: Replace with Twilio SMS node or email node as needed."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.GOOGLE_SHEET_TAB || 'Leads'}}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "name": "={{ $json.body.name }}",
+            "email": "={{ $json.body.email }}",
+            "phone": "={{ $json.body.phone }}",
+            "interest": "={{ $json.body.interest || '' }}",
+            "referral_source": "={{ $json.body.referral_source || '' }}",
+            "crm_contact_id": "={{ $json.id || $json.vid || '' }}",
+            "status": "NEW"
+          }
+        },
+        "options": {}
+      },
+      "id": "datastore-007",
+      "name": "Append to Data Store",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1050, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "{{$env.GOOGLE_SHEETS_CREDENTIAL_NAME}}"
+        }
+      },
+      "notes": "PURPOSE: Log lead to Google Sheets for audit trail and backup (HIPAA: use BAA-compliant storage).\nINPUTS: Merged lead data with CRM ID.\nOUTPUTS: Append confirmation.\nCONFIG: Set GOOGLE_SHEET_ID and optional GOOGLE_SHEET_TAB.\nALTERNATES: Swap for Airtable, Notion, or database insert node."
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-final-008",
+      "name": "Merge All Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1250, 300],
+      "notes": "PURPOSE: Consolidate all outputs (CRM, notification, data store) into single response payload.\nINPUTS: CRM data, notification status, data store confirmation.\nOUTPUTS: Complete execution summary.\nUSE CASE: Provide comprehensive response to webhook caller."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": true,\n  \"message\": \"Lead captured successfully\",\n  \"data\": {\n    \"contact_id\": $json.id || $json.vid || null,\n    \"email\": $json.body.email,\n    \"name\": $json.body.name,\n    \"timestamp\": $now.toISO()\n  },\n  \"metadata\": {\n    \"crm_updated\": true,\n    \"notification_sent\": true,\n    \"stored\": true\n  }\n} }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "success-response-009",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1450, 300],
+      "notes": "PURPOSE: Return standardized success payload to webhook caller.\nINPUTS: Merged execution results.\nOUTPUTS: HTTP 200 with patient_lead.json structure.\nFORMAT: Includes contact_id for downstream workflows, metadata for audit."
+    },
+    {
+      "parameters": {
+        "mode": "passThrough"
+      },
+      "id": "error-handler-010",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1050, 450],
+      "onError": "continueErrorOutput",
+      "notes": "PURPOSE: Catch execution errors and prevent workflow failure.\nINPUTS: Any upstream error.\nOUTPUTS: Error details for logging.\nBEST PRACTICE: Connect to logging service or error notification in production."
+    }
+  ],
+  "connections": {
+    "Webhook Trigger - Intake Form": {
+      "main": [
+        [
+          {
+            "node": "Validate Required Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Required Fields": {
+      "main": [
+        [
+          {
+            "node": "Upsert Contact to CRM",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Contact to CRM": {
+      "main": [
+        [
+          {
+            "node": "Merge Webhook + CRM Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger - Intake Form": {
+      "main": [
+        [
+          {
+            "node": "Merge Webhook + CRM Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Webhook + CRM Data": {
+      "main": [
+        [
+          {
+            "node": "Send Internal Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append to Data Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Internal Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to Data Store": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge All Results": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "{{$env.ERROR_WORKFLOW_ID}}"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Aigent",
+      "id": "aigent-module"
+    },
+    {
+      "name": "Clinic-Template",
+      "id": "clinic-template"
+    },
+    {
+      "name": "Intake",
+      "id": "intake"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-10-29T00:00:00.000Z",
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "{{$env.N8N_INSTANCE_ID}}",
+    "description": "Aigent Universal Clinic Template - Module 01: Intake & Lead Capture. Accepts standardized lead data via webhook, validates input, upserts to CRM (HubSpot/alternate), sends internal notifications, logs to data store, and returns success payload. Fully credential-agnostic and PHI-safe.",
+    "author": "Aigent Automation Engineering",
+    "version": "1.0.0",
+    "license": "Proprietary - Aigent Company",
+    "documentation": "https://docs.aigent.company/templates/module-01"
+  }
+}

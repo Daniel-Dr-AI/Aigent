@@ -1,0 +1,1038 @@
+{
+  "name": "Aigent Module 07 - Analytics & Reporting Dashboard",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 6
+            }
+          ]
+        }
+      },
+      "id": "701",
+      "name": "Schedule Trigger - Daily Analytics",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "notes": "Trigger analytics collection daily at 6 AM (configurable via ANALYTICS_SCHEDULE)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate reporting period based on REPORT_PERIOD_DAYS\nconst periodDays = parseInt($env.REPORT_PERIOD_DAYS || 30);\nconst endDate = new Date();\nconst startDate = new Date();\nstartDate.setDate(startDate.getDate() - periodDays);\n\nconst traceId = `ANALYTICS-${Date.now()}`;\n\nreturn {\n  json: {\n    trace_id: traceId,\n    period: {\n      days: periodDays,\n      start: startDate.toISOString(),\n      end: endDate.toISOString(),\n      label: `${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`\n    },\n    timestamp: new Date().toISOString(),\n    data_sources: [],\n    metrics: {}\n  }\n};"
+      },
+      "id": "702",
+      "name": "Initialize Reporting Period",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300],
+      "notes": "Calculate date range for analytics collection"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "contact",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "properties": [
+            {
+              "propertyName": "createdate",
+              "operator": "gte",
+              "value": "={{$json.period.start}}"
+            }
+          ]
+        },
+        "additionalFields": {
+          "propertiesWithHistory": "email,lifecyclestage,lead_source,createdate"
+        }
+      },
+      "id": "703",
+      "name": "Collect Leads from HubSpot",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [650, 200],
+      "notes": "Fetch all leads created within reporting period",
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "{{$env.HUBSPOT_CREDENTIAL_ID}}",
+          "name": "HubSpot OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.SHEET_LEADS_TAB || 'Leads'}}",
+        "options": {
+          "range": "A:Z"
+        }
+      },
+      "id": "704",
+      "name": "Collect Leads from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [650, 300],
+      "notes": "Alternative: fetch leads from Google Sheets if not using CRM",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize leads data from multiple sources\nconst input = $input.all();\nlet leads = [];\n\ninput.forEach(item => {\n  const source = item.json.source || 'unknown';\n  \n  // HubSpot format\n  if (item.json.properties) {\n    leads.push({\n      email: item.json.properties.email,\n      name: `${item.json.properties.firstname || ''} ${item.json.properties.lastname || ''}`.trim(),\n      source: item.json.properties.lead_source || 'hubspot',\n      created_at: item.json.properties.createdate,\n      lifecycle_stage: item.json.properties.lifecyclestage\n    });\n  }\n  // Google Sheets format\n  else if (item.json.Email) {\n    leads.push({\n      email: item.json.Email,\n      name: item.json.Name || item.json['Patient Name'],\n      source: item.json.Source || 'google_sheets',\n      created_at: item.json['Created At'] || item.json.Timestamp,\n      lifecycle_stage: item.json.Stage\n    });\n  }\n});\n\n// Filter by date range\nconst startDate = new Date($node[\"Initialize Reporting Period\"].json.period.start);\nconst endDate = new Date($node[\"Initialize Reporting Period\"].json.period.end);\n\nleads = leads.filter(lead => {\n  if (!lead.created_at) return false;\n  const leadDate = new Date(lead.created_at);\n  return leadDate >= startDate && leadDate <= endDate;\n});\n\nreturn {\n  json: {\n    ...$node[\"Initialize Reporting Period\"].json,\n    leads: leads,\n    data_sources: [...$node[\"Initialize Reporting Period\"].json.data_sources, 'Leads']\n  }\n};"
+      },
+      "id": "705",
+      "name": "Normalize Leads Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 250],
+      "notes": "Merge and normalize leads from all sources"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.CALCOM_API_BASE || 'https://api.cal.com'}}/v1/bookings",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.CALCOM_TOKEN}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "startTime",
+              "value": "={{$json.period.start}}"
+            },
+            {
+              "name": "endTime",
+              "value": "={{$json.period.end}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "706",
+      "name": "Collect Bookings from Cal.com",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 200],
+      "notes": "Fetch all appointment bookings from Cal.com",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.SHEET_BOOKINGS_TAB || 'Bookings'}}",
+        "options": {
+          "range": "A:Z"
+        }
+      },
+      "id": "707",
+      "name": "Collect Bookings from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1050, 300],
+      "notes": "Alternative: fetch bookings from Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize bookings data\nconst input = $input.all();\nlet bookings = [];\n\ninput.forEach(item => {\n  // Cal.com format\n  if (item.json.bookings) {\n    item.json.bookings.forEach(booking => {\n      bookings.push({\n        email: booking.attendees?.[0]?.email,\n        patient_name: booking.attendees?.[0]?.name,\n        appointment_date: booking.startTime,\n        status: booking.status,\n        visit_type: booking.eventType?.title,\n        source: 'calcom'\n      });\n    });\n  }\n  // Google Sheets format\n  else if (item.json['Appointment Date']) {\n    bookings.push({\n      email: item.json.Email || item.json['Patient Email'],\n      patient_name: item.json['Patient Name'],\n      appointment_date: item.json['Appointment Date'],\n      status: item.json.Status,\n      visit_type: item.json['Visit Type'],\n      source: 'google_sheets'\n    });\n  }\n});\n\n// Filter by date range\nconst startDate = new Date($node[\"Initialize Reporting Period\"].json.period.start);\nconst endDate = new Date($node[\"Initialize Reporting Period\"].json.period.end);\n\nbookings = bookings.filter(booking => {\n  if (!booking.appointment_date) return false;\n  const apptDate = new Date(booking.appointment_date);\n  return apptDate >= startDate && apptDate <= endDate;\n});\n\nreturn {\n  json: {\n    ...$node[\"Normalize Leads Data\"].json,\n    bookings: bookings,\n    data_sources: [...$node[\"Normalize Leads Data\"].json.data_sources, 'Bookings']\n  }\n};"
+      },
+      "id": "708",
+      "name": "Normalize Bookings Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 250],
+      "notes": "Merge and normalize bookings from all sources"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "https://api.stripe.com/v1/charges",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.STRIPE_API_KEY}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "created[gte]",
+              "value": "={{Math.floor(new Date($json.period.start).getTime() / 1000)}}"
+            },
+            {
+              "name": "created[lte]",
+              "value": "={{Math.floor(new Date($json.period.end).getTime() / 1000)}}"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "709",
+      "name": "Collect Payments from Stripe",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1450, 200],
+      "notes": "Fetch all payment transactions from Stripe",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.SHEET_PAYMENTS_TAB || 'Payments'}}",
+        "options": {
+          "range": "A:Z"
+        }
+      },
+      "id": "710",
+      "name": "Collect Payments from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1450, 300],
+      "notes": "Alternative: fetch payments from Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize payments data\nconst input = $input.all();\nlet payments = [];\n\ninput.forEach(item => {\n  // Stripe format\n  if (item.json.data) {\n    item.json.data.forEach(charge => {\n      payments.push({\n        email: charge.billing_details?.email || charge.receipt_email,\n        amount: charge.amount / 100,\n        currency: charge.currency,\n        status: charge.status,\n        paid: charge.paid,\n        created_at: new Date(charge.created * 1000).toISOString(),\n        source: 'stripe'\n      });\n    });\n  }\n  // Google Sheets format\n  else if (item.json.Amount) {\n    payments.push({\n      email: item.json.Email || item.json['Patient Email'],\n      amount: parseFloat(item.json.Amount),\n      currency: item.json.Currency || 'usd',\n      status: item.json.Status,\n      paid: item.json.Status === 'paid',\n      created_at: item.json['Payment Date'] || item.json.Timestamp,\n      source: 'google_sheets'\n    });\n  }\n});\n\n// Filter successful payments only\npayments = payments.filter(p => p.paid && p.status === 'succeeded' || p.status === 'paid');\n\nreturn {\n  json: {\n    ...$node[\"Normalize Bookings Data\"].json,\n    payments: payments,\n    data_sources: [...$node[\"Normalize Bookings Data\"].json.data_sources, 'Payments']\n  }\n};"
+      },
+      "id": "711",
+      "name": "Normalize Payments Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 250],
+      "notes": "Merge and normalize payments from all sources"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.SHEET_SURVEYS_TAB || 'Survey_Responses'}}",
+        "options": {
+          "range": "A:Z"
+        }
+      },
+      "id": "712",
+      "name": "Collect NPS from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1850, 200],
+      "notes": "Fetch NPS survey responses",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "accessToken",
+        "url": "https://api.typeform.com/forms/{{$env.TYPEFORM_FORM_ID}}/responses",
+        "method": "GET",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.TYPEFORM_TOKEN}}"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "since",
+              "value": "={{$json.period.start}}"
+            },
+            {
+              "name": "until",
+              "value": "={{$json.period.end}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "713",
+      "name": "Collect NPS from Typeform",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1850, 300],
+      "notes": "Alternative: fetch NPS from Typeform",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize NPS data\nconst input = $input.all();\nlet npsScores = [];\n\ninput.forEach(item => {\n  // Typeform format\n  if (item.json.items) {\n    item.json.items.forEach(response => {\n      const npsAnswer = response.answers?.find(a => a.type === 'number' || a.type === 'opinion_scale');\n      if (npsAnswer) {\n        npsScores.push({\n          email: response.hidden?.email,\n          nps: npsAnswer.number || npsAnswer.opinion_scale,\n          timestamp: response.submitted_at,\n          source: 'typeform'\n        });\n      }\n    });\n  }\n  // Google Sheets format\n  else if (item.json['NPS Score']) {\n    const nps = parseInt(item.json['NPS Score']);\n    if (!isNaN(nps)) {\n      npsScores.push({\n        email: item.json.Email,\n        nps: nps,\n        timestamp: item.json.Timestamp,\n        source: 'google_sheets'\n      });\n    }\n  }\n});\n\nreturn {\n  json: {\n    ...$node[\"Normalize Payments Data\"].json,\n    nps_scores: npsScores,\n    data_sources: [...$node[\"Normalize Payments Data\"].json.data_sources, 'NPS']\n  }\n};"
+      },
+      "id": "714",
+      "name": "Normalize NPS Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 250],
+      "notes": "Merge and normalize NPS survey responses"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "read",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.SHEET_OCR_TAB || 'OCR_Log'}}",
+        "options": {
+          "range": "A:Z"
+        }
+      },
+      "id": "715",
+      "name": "Collect OCR Metrics from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2250, 250],
+      "notes": "Fetch document processing metrics from OCR log",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize OCR metrics\nconst input = $input.all();\nlet ocrMetrics = [];\n\ninput.forEach(item => {\n  if (item.json.Timestamp && item.json['Document ID']) {\n    ocrMetrics.push({\n      document_id: item.json['Document ID'],\n      doc_type: item.json['Doc Type'],\n      confidence: parseFloat(item.json.Confidence) || 0,\n      processing_time: parseFloat(item.json['Processing Time']) || null,\n      timestamp: item.json.Timestamp,\n      ocr_engine: item.json['OCR Engine']\n    });\n  }\n});\n\n// Filter by date range and confidence threshold\nconst startDate = new Date($node[\"Initialize Reporting Period\"].json.period.start);\nconst endDate = new Date($node[\"Initialize Reporting Period\"].json.period.end);\nconst minConfidence = parseFloat($env.MIN_CONFIDENCE_FILTER || 0.0);\n\nocrMetrics = ocrMetrics.filter(metric => {\n  if (!metric.timestamp) return false;\n  const metricDate = new Date(metric.timestamp);\n  return metricDate >= startDate && metricDate <= endDate && metric.confidence >= minConfidence;\n});\n\nreturn {\n  json: {\n    ...$node[\"Normalize NPS Data\"].json,\n    ocr_metrics: ocrMetrics,\n    data_sources: [...$node[\"Normalize NPS Data\"].json.data_sources, 'OCR']\n  }\n};"
+      },
+      "id": "716",
+      "name": "Normalize OCR Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2450, 250],
+      "notes": "Process and filter OCR performance metrics"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute KPIs from aggregated data\nconst data = $json;\n\nconst leads = data.leads || [];\nconst bookings = data.bookings || [];\nconst payments = data.payments || [];\nconst npsScores = data.nps_scores || [];\nconst ocrMetrics = data.ocr_metrics || [];\n\n// Count unique completed visits (bookings with status = completed)\nconst completedVisits = bookings.filter(b => \n  b.status === 'completed' || b.status === 'attended'\n).length;\n\n// Revenue calculation\nconst totalRevenue = payments.reduce((sum, p) => sum + (p.amount || 0), 0);\nconst avgRevenuePerPatient = payments.length > 0 ? totalRevenue / payments.length : 0;\n\n// NPS calculation\nconst npsAvg = npsScores.length > 0 \n  ? npsScores.reduce((sum, s) => sum + s.nps, 0) / npsScores.length \n  : 0;\n\nconst promoters = npsScores.filter(s => s.nps >= 9).length;\nconst detractors = npsScores.filter(s => s.nps <= 6).length;\nconst npsScore = npsScores.length > 0 \n  ? ((promoters - detractors) / npsScores.length) * 100 \n  : 0;\n\n// Conversion rates\nconst leadToBooking = leads.length > 0 ? bookings.length / leads.length : 0;\nconst bookingToVisit = bookings.length > 0 ? completedVisits / bookings.length : 0;\nconst visitToPayment = completedVisits > 0 ? payments.length / completedVisits : 0;\n\n// No-show rate\nconst noShows = bookings.filter(b => b.status === 'no_show' || b.status === 'cancelled').length;\nconst showRate = bookings.length > 0 ? 1 - (noShows / bookings.length) : 0;\n\n// Retention: patients with multiple visits\nconst patientEmails = new Set();\nconst repeatPatients = new Set();\nbookings.forEach(b => {\n  if (b.email) {\n    if (patientEmails.has(b.email)) {\n      repeatPatients.add(b.email);\n    }\n    patientEmails.add(b.email);\n  }\n});\nconst retentionRate = patientEmails.size > 0 ? repeatPatients.size / patientEmails.size : 0;\n\n// OCR metrics\nconst avgOcrConfidence = ocrMetrics.length > 0\n  ? ocrMetrics.reduce((sum, m) => sum + m.confidence, 0) / ocrMetrics.length\n  : 0;\n\nconst avgProcessingTime = ocrMetrics.filter(m => m.processing_time).length > 0\n  ? ocrMetrics.filter(m => m.processing_time).reduce((sum, m) => sum + m.processing_time, 0) \n    / ocrMetrics.filter(m => m.processing_time).length\n  : 0;\n\nreturn {\n  json: {\n    ...data,\n    totals: {\n      leads: leads.length,\n      bookings: bookings.length,\n      completed_visits: completedVisits,\n      no_shows: noShows,\n      revenue_usd: Math.round(totalRevenue * 100) / 100,\n      payments_count: payments.length,\n      nps_responses: npsScores.length,\n      documents_processed: ocrMetrics.length\n    },\n    averages: {\n      revenue_per_patient: Math.round(avgRevenuePerPatient * 100) / 100,\n      nps_score: Math.round(npsAvg * 10) / 10,\n      nps_net_score: Math.round(npsScore * 10) / 10,\n      ocr_confidence: Math.round(avgOcrConfidence * 100) / 100,\n      doc_processing_time_sec: Math.round(avgProcessingTime * 10) / 10\n    },\n    rates: {\n      lead_to_booking: Math.round(leadToBooking * 100) / 100,\n      booking_to_visit: Math.round(bookingToVisit * 100) / 100,\n      visit_to_payment: Math.round(visitToPayment * 100) / 100,\n      show_rate: Math.round(showRate * 100) / 100,\n      retention_rate: Math.round(retentionRate * 100) / 100\n    },\n    segments: {\n      promoters: promoters,\n      passives: npsScores.filter(s => s.nps >= 7 && s.nps <= 8).length,\n      detractors: detractors,\n      unique_patients: patientEmails.size,\n      repeat_patients: repeatPatients.size\n    }\n  }\n};"
+      },
+      "id": "717",
+      "name": "Compute KPIs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2650, 250],
+      "notes": "Calculate all key performance indicators"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate HTML report\nconst data = $json;\nconst brandName = $env.BRAND_NAME || 'Your Clinic';\n\nconst html = `\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"UTF-8\">\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n  <title>${brandName} - Analytics Report</title>\n  <style>\n    * { margin: 0; padding: 0; box-sizing: border-box; }\n    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; background: #f5f7fa; padding: 20px; }\n    .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }\n    .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; }\n    .header h1 { font-size: 28px; margin-bottom: 10px; }\n    .header p { opacity: 0.9; font-size: 16px; }\n    .content { padding: 30px; }\n    .section { margin-bottom: 30px; }\n    .section h2 { font-size: 20px; color: #2d3748; margin-bottom: 15px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }\n    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }\n    .metric-card { background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 20px; }\n    .metric-card h3 { font-size: 14px; color: #718096; text-transform: uppercase; margin-bottom: 8px; }\n    .metric-card .value { font-size: 32px; font-weight: bold; color: #2d3748; }\n    .metric-card .suffix { font-size: 18px; color: #718096; margin-left: 5px; }\n    .rate-positive { color: #48bb78; }\n    .rate-negative { color: #f56565; }\n    .footer { background: #f7fafc; padding: 20px 30px; border-radius: 0 0 8px 8px; text-align: center; color: #718096; font-size: 14px; }\n    table { width: 100%; border-collapse: collapse; }\n    table th { background: #edf2f7; padding: 12px; text-align: left; font-size: 14px; color: #2d3748; }\n    table td { padding: 12px; border-bottom: 1px solid #e2e8f0; color: #4a5568; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h1>${brandName} Analytics Report</h1>\n      <p>Period: ${data.period.label}</p>\n      <p>Generated: ${new Date().toLocaleString()}</p>\n    </div>\n    \n    <div class=\"content\">\n      <div class=\"section\">\n        <h2>📊 Volume Metrics</h2>\n        <div class=\"metrics-grid\">\n          <div class=\"metric-card\">\n            <h3>Total Leads</h3>\n            <div class=\"value\">${data.totals.leads}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Appointments Booked</h3>\n            <div class=\"value\">${data.totals.bookings}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Completed Visits</h3>\n            <div class=\"value\">${data.totals.completed_visits}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Total Revenue</h3>\n            <div class=\"value\">$${data.totals.revenue_usd.toLocaleString()}<span class=\"suffix\">USD</span></div>\n          </div>\n        </div>\n      </div>\n\n      <div class=\"section\">\n        <h2>📈 Conversion Funnel</h2>\n        <div class=\"metrics-grid\">\n          <div class=\"metric-card\">\n            <h3>Lead → Booking</h3>\n            <div class=\"value rate-positive\">${(data.rates.lead_to_booking * 100).toFixed(1)}<span class=\"suffix\">%</span></div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Booking → Visit</h3>\n            <div class=\"value rate-positive\">${(data.rates.booking_to_visit * 100).toFixed(1)}<span class=\"suffix\">%</span></div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Show Rate</h3>\n            <div class=\"value rate-positive\">${(data.rates.show_rate * 100).toFixed(1)}<span class=\"suffix\">%</span></div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Retention Rate</h3>\n            <div class=\"value\">${(data.rates.retention_rate * 100).toFixed(1)}<span class=\"suffix\">%</span></div>\n          </div>\n        </div>\n      </div>\n\n      <div class=\"section\">\n        <h2>💰 Revenue Metrics</h2>\n        <div class=\"metrics-grid\">\n          <div class=\"metric-card\">\n            <h3>Avg Revenue per Patient</h3>\n            <div class=\"value\">$${data.averages.revenue_per_patient.toFixed(2)}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Total Payments</h3>\n            <div class=\"value\">${data.totals.payments_count}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Visit → Payment</h3>\n            <div class=\"value rate-positive\">${(data.rates.visit_to_payment * 100).toFixed(1)}<span class=\"suffix\">%</span></div>\n          </div>\n        </div>\n      </div>\n\n      <div class=\"section\">\n        <h2>😊 Patient Satisfaction (NPS)</h2>\n        <div class=\"metrics-grid\">\n          <div class=\"metric-card\">\n            <h3>Average NPS Score</h3>\n            <div class=\"value\">${data.averages.nps_score.toFixed(1)}<span class=\"suffix\">/10</span></div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Net Promoter Score</h3>\n            <div class=\"value ${data.averages.nps_net_score >= 50 ? 'rate-positive' : ''}\">${data.averages.nps_net_score.toFixed(1)}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Total Responses</h3>\n            <div class=\"value\">${data.totals.nps_responses}</div>\n          </div>\n        </div>\n        <table style=\"margin-top: 20px;\">\n          <thead>\n            <tr>\n              <th>Segment</th>\n              <th>Count</th>\n              <th>Percentage</th>\n            </tr>\n          </thead>\n          <tbody>\n            <tr>\n              <td>🟢 Promoters (9-10)</td>\n              <td>${data.segments.promoters}</td>\n              <td>${data.totals.nps_responses > 0 ? ((data.segments.promoters / data.totals.nps_responses) * 100).toFixed(1) : 0}%</td>\n            </tr>\n            <tr>\n              <td>🟡 Passives (7-8)</td>\n              <td>${data.segments.passives}</td>\n              <td>${data.totals.nps_responses > 0 ? ((data.segments.passives / data.totals.nps_responses) * 100).toFixed(1) : 0}%</td>\n            </tr>\n            <tr>\n              <td>🔴 Detractors (0-6)</td>\n              <td>${data.segments.detractors}</td>\n              <td>${data.totals.nps_responses > 0 ? ((data.segments.detractors / data.totals.nps_responses) * 100).toFixed(1) : 0}%</td>\n            </tr>\n          </tbody>\n        </table>\n      </div>\n\n      <div class=\"section\">\n        <h2>📄 Document Processing (OCR)</h2>\n        <div class=\"metrics-grid\">\n          <div class=\"metric-card\">\n            <h3>Documents Processed</h3>\n            <div class=\"value\">${data.totals.documents_processed}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Avg Confidence Score</h3>\n            <div class=\"value\">${(data.averages.ocr_confidence * 100).toFixed(1)}<span class=\"suffix\">%</span></div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Avg Processing Time</h3>\n            <div class=\"value\">${data.averages.doc_processing_time_sec.toFixed(1)}<span class=\"suffix\">sec</span></div>\n          </div>\n        </div>\n      </div>\n\n      <div class=\"section\">\n        <h2>👥 Patient Engagement</h2>\n        <div class=\"metrics-grid\">\n          <div class=\"metric-card\">\n            <h3>Unique Patients</h3>\n            <div class=\"value\">${data.segments.unique_patients}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>Repeat Patients</h3>\n            <div class=\"value\">${data.segments.repeat_patients}</div>\n          </div>\n          <div class=\"metric-card\">\n            <h3>No-Shows</h3>\n            <div class=\"value rate-negative\">${data.totals.no_shows}</div>\n          </div>\n        </div>\n      </div>\n    </div>\n\n    <div class=\"footer\">\n      <p>Generated by Aigent Module 07 - Analytics & Reporting Dashboard</p>\n      <p>Data Sources: ${data.data_sources.join(', ')}</p>\n    </div>\n  </div>\n</body>\n</html>\n`;\n\nreturn {\n  json: {\n    ...data,\n    report_html: html\n  }\n};"
+      },
+      "id": "718",
+      "name": "Generate HTML Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2850, 250],
+      "notes": "Create formatted HTML analytics report"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$env.REPORT_FORMAT || 'html'}}",
+              "value2": "html"
+            }
+          ]
+        }
+      },
+      "id": "719",
+      "name": "Check Report Format",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3050, 250],
+      "notes": "Determine output format: HTML, Markdown, or JSON"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{$env.S3_BUCKET || 'clinic-reports'}}",
+        "fileName": "={{$env.BRAND_NAME || 'clinic'}}_report_{{$now.format('YYYY-MM-DD')}}.html",
+        "binaryData": false,
+        "fileContent": "={{$json.report_html}}",
+        "additionalFields": {
+          "acl": "private",
+          "contentType": "text/html"
+        }
+      },
+      "id": "720",
+      "name": "Upload Report to S3",
+      "type": "n8n-nodes-base.awsS3",
+      "typeVersion": 1,
+      "position": [3250, 200],
+      "notes": "Store HTML report in S3 bucket",
+      "credentials": {
+        "aws": {
+          "id": "{{$env.AWS_CREDENTIAL_ID}}",
+          "name": "AWS Credentials"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "folderId": "={{$env.DRIVE_FOLDER_ID}}",
+        "fileName": "={{$env.BRAND_NAME || 'clinic'}}_report_{{$now.format('YYYY-MM-DD')}}.html",
+        "binaryData": false,
+        "fileContent": "={{$json.report_html}}",
+        "options": {}
+      },
+      "id": "721",
+      "name": "Upload Report to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [3250, 300],
+      "notes": "Alternative: store report in Google Drive",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "{{$env.DRIVE_CREDENTIAL_ID}}",
+          "name": "Google Drive OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate report URL based on storage provider\nconst storageProvider = $env.STORAGE_PROVIDER || 's3';\nconst fileName = `${$env.BRAND_NAME || 'clinic'}_report_${new Date().toISOString().split('T')[0]}.html`;\n\nlet reportUrl = '';\n\nif (storageProvider === 's3') {\n  const bucket = $env.S3_BUCKET || 'clinic-reports';\n  const region = $env.S3_REGION || 'us-east-1';\n  reportUrl = `https://${bucket}.s3.${region}.amazonaws.com/${fileName}`;\n}\nelse if (storageProvider === 'gdrive') {\n  // Google Drive file ID from upload response\n  const fileId = $json.id || 'unknown';\n  reportUrl = `https://drive.google.com/file/d/${fileId}/view`;\n}\n\nreturn {\n  json: {\n    ...$json,\n    report_url: reportUrl\n  }\n};"
+      },
+      "id": "722",
+      "name": "Generate Report URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3450, 250],
+      "notes": "Create accessible URL for report"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$env.EMAIL_REPORT_TO !== undefined && $env.EMAIL_REPORT_TO !== ''}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "723",
+      "name": "Check If Email Enabled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3650, 250],
+      "notes": "Send report via email if EMAIL_REPORT_TO is configured"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.EMAIL_FROM || 'noreply@yourclinic.com'}}",
+        "toEmail": "={{$env.EMAIL_REPORT_TO}}",
+        "subject": "={{$env.BRAND_NAME || 'Clinic'}} Analytics Report - {{$now.format('YYYY-MM-DD')}}",
+        "emailType": "html",
+        "message": "={{$json.report_html}}",
+        "options": {}
+      },
+      "id": "724",
+      "name": "Send Report Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [3850, 200],
+      "notes": "Email HTML report to configured recipients",
+      "credentials": {
+        "smtp": {
+          "id": "{{$env.SMTP_CREDENTIAL_ID}}",
+          "name": "SMTP Account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.SHEET_ANALYTICS_TAB || 'Analytics_Summary'}}",
+        "columns": {
+          "mappings": [
+            {
+              "column": "Date",
+              "value": "={{$now.format('YYYY-MM-DD')}}"
+            },
+            {
+              "column": "Period",
+              "value": "={{$json.period.label}}"
+            },
+            {
+              "column": "Leads",
+              "value": "={{$json.totals.leads}}"
+            },
+            {
+              "column": "Bookings",
+              "value": "={{$json.totals.bookings}}"
+            },
+            {
+              "column": "Completed Visits",
+              "value": "={{$json.totals.completed_visits}}"
+            },
+            {
+              "column": "Revenue USD",
+              "value": "={{$json.totals.revenue_usd}}"
+            },
+            {
+              "column": "Avg NPS",
+              "value": "={{$json.averages.nps_score}}"
+            },
+            {
+              "column": "Lead to Booking %",
+              "value": "={{$json.rates.lead_to_booking * 100}}"
+            },
+            {
+              "column": "Show Rate %",
+              "value": "={{$json.rates.show_rate * 100}}"
+            },
+            {
+              "column": "Retention Rate %",
+              "value": "={{$json.rates.retention_rate * 100}}"
+            },
+            {
+              "column": "Documents Processed",
+              "value": "={{$json.totals.documents_processed}}"
+            },
+            {
+              "column": "Report URL",
+              "value": "={{$json.report_url}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "725",
+      "name": "Log Summary to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [3850, 350],
+      "notes": "Append summary metrics to historical log",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build final aggregated_metrics.json output\nconst data = $json;\n\nconst output = {\n  success: true,\n  trace_id: data.trace_id,\n  period: data.period.label,\n  totals: {\n    leads: data.totals.leads,\n    bookings: data.totals.bookings,\n    completed_visits: data.totals.completed_visits,\n    revenue_usd: data.totals.revenue_usd,\n    nps_avg: data.averages.nps_score,\n    doc_processing_time_avg_sec: data.averages.doc_processing_time_sec\n  },\n  rates: {\n    lead_to_booking: data.rates.lead_to_booking,\n    booking_to_visit: data.rates.booking_to_visit,\n    visit_to_payment: data.rates.visit_to_payment,\n    show_rate: data.rates.show_rate,\n    retention_rate: data.rates.retention_rate\n  },\n  report_links: {\n    html_report: data.report_url || null,\n    sheet_url: `https://docs.google.com/spreadsheets/d/${$env.GOOGLE_SHEET_ID}`,\n    looker_dashboard: $env.LOOKER_STUDIO_URL || null\n  },\n  metadata: {\n    generated_at: new Date().toISOString(),\n    data_sources: data.data_sources,\n    processed_by: 'Aigent_Module_07'\n  }\n};\n\nreturn { json: output };"
+      },
+      "id": "726",
+      "name": "Build aggregated_metrics.json",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4050, 300],
+      "notes": "Construct standardized output schema"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$env.LOOKER_EXPORT_ENABLED === 'true'}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "727",
+      "name": "Check If Looker Export Enabled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [4250, 300],
+      "notes": "Export to Looker Studio / Power BI if enabled"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.LOOKER_STUDIO_URL}}/api/data",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "metrics",
+              "value": "={{JSON.stringify($json)}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "728",
+      "name": "Export to Looker Studio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4450, 250],
+      "notes": "Push metrics to Looker Studio dashboard",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "729",
+      "name": "Return aggregated_metrics.json",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [4650, 300],
+      "notes": "Return standardized analytics output"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Error handler\nconst error = $input.item.json.error || 'Unknown error occurred';\nconst stage = $input.item.json.stage || 'unknown';\nconst traceId = $input.item.json.trace_id || `ERR-${Date.now()}`;\n\nconst errorResponse = {\n  success: false,\n  error: error.message || error,\n  stage: stage,\n  trace_id: traceId,\n  timestamp: new Date().toISOString()\n};\n\nif ($env.DEBUG_MODE === 'true') {\n  console.error('Module 07 Error:', JSON.stringify(errorResponse, null, 2));\n}\n\nreturn { json: errorResponse };"
+      },
+      "id": "730",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2850, 500],
+      "notes": "Catch and format errors"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "731",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3050, 500],
+      "notes": "Return error JSON with 500 status"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger - Daily Analytics": {
+      "main": [
+        [
+          {
+            "node": "Initialize Reporting Period",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Reporting Period": {
+      "main": [
+        [
+          {
+            "node": "Collect Leads from HubSpot",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Collect Leads from Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Leads from HubSpot": {
+      "main": [
+        [
+          {
+            "node": "Normalize Leads Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Leads from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Normalize Leads Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Leads Data": {
+      "main": [
+        [
+          {
+            "node": "Collect Bookings from Cal.com",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Collect Bookings from Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Bookings from Cal.com": {
+      "main": [
+        [
+          {
+            "node": "Normalize Bookings Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Bookings from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Normalize Bookings Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Bookings Data": {
+      "main": [
+        [
+          {
+            "node": "Collect Payments from Stripe",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Collect Payments from Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Payments from Stripe": {
+      "main": [
+        [
+          {
+            "node": "Normalize Payments Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Payments from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Normalize Payments Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Payments Data": {
+      "main": [
+        [
+          {
+            "node": "Collect NPS from Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Collect NPS from Typeform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect NPS from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Normalize NPS Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect NPS from Typeform": {
+      "main": [
+        [
+          {
+            "node": "Normalize NPS Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize NPS Data": {
+      "main": [
+        [
+          {
+            "node": "Collect OCR Metrics from Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect OCR Metrics from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Normalize OCR Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize OCR Metrics": {
+      "main": [
+        [
+          {
+            "node": "Compute KPIs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute KPIs": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate HTML Report": {
+      "main": [
+        [
+          {
+            "node": "Check Report Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Report Format": {
+      "main": [
+        [
+          {
+            "node": "Upload Report to S3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload Report to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Report to S3": {
+      "main": [
+        [
+          {
+            "node": "Generate Report URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Report to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Generate Report URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report URL": {
+      "main": [
+        [
+          {
+            "node": "Check If Email Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Email Enabled": {
+      "main": [
+        [
+          {
+            "node": "Send Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Summary to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Report Email": {
+      "main": [
+        [
+          {
+            "node": "Log Summary to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Summary to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Build aggregated_metrics.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build aggregated_metrics.json": {
+      "main": [
+        [
+          {
+            "node": "Check If Looker Export Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Looker Export Enabled": {
+      "main": [
+        [
+          {
+            "node": "Export to Looker Studio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return aggregated_metrics.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export to Looker Studio": {
+      "main": [
+        [
+          {
+            "node": "Return aggregated_metrics.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "{{$env.ERROR_WORKFLOW_ID}}"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-01-15T00:00:00.000Z",
+  "versionId": "1.0.0"
+}

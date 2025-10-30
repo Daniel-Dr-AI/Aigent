@@ -1,0 +1,762 @@
+{
+  "name": "Aigent Module 09 - Compliance & Audit Logging",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aigent-audit-log",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "901",
+      "name": "Webhook - Audit Event Receiver",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "aigent-audit-log",
+      "notes": "Primary entry point: receives audit events from any upstream module (01-08). Accepts POST with JSON body containing module, event, actor, resource, timestamp, severity, payload."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 902 - Validate & Normalize Event\n// Enforce required schema, set defaults, generate audit_id\n\nconst event = $input.first().json.body || $input.first().json;\n\n// Required fields validation\nconst required = ['module', 'event', 'timestamp'];\nconst missing = required.filter(field => !event[field]);\n\nif (missing.length > 0) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n\n// Generate unique audit ID using ksuid pattern (timestamp + random)\nconst now = new Date();\nconst timestamp = now.getTime();\nconst random = Math.random().toString(36).substring(2, 15);\nconst audit_id = `aud_${timestamp}_${random}`;\n\n// Normalize event structure\nconst normalized = {\n  audit_id: audit_id,\n  ts: event.timestamp || now.toISOString(),\n  module: event.module,\n  event: event.event,\n  severity: event.severity || 'info',\n  \n  // Actor fields\n  actor_type: event.actor?.type || 'system',\n  actor_id: event.actor?.id || 'unknown',\n  actor_ip: event.actor?.ip || null,\n  \n  // Resource fields\n  resource_type: event.resource?.type || null,\n  resource_id: event.resource?.id || null,\n  \n  // Payload and metadata\n  payload_json: event.payload || {},\n  trace_id: event.trace_id || audit_id,\n  \n  // Metadata\n  ingested_at: now.toISOString(),\n  original_event: event\n};\n\n// Validate severity\nconst validSeverities = ['info', 'warning', 'high', 'critical'];\nif (!validSeverities.includes(normalized.severity)) {\n  normalized.severity = 'info';\n}\n\n// Validate timestamp format\ntry {\n  new Date(normalized.ts).toISOString();\n} catch (e) {\n  normalized.ts = now.toISOString();\n}\n\nreturn normalized;"
+      },
+      "id": "902",
+      "name": "Validate & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "Validates required fields (module, event, timestamp), generates unique audit_id, normalizes to standard schema with actor/resource/payload structure."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 903 - PHI Minimization & Masking\n// Apply field allowlist, mask sensitive data per HIPAA requirements\n\nconst event = $input.first().json;\n\n// Masking configuration from env\nconst maskEmailLocal = $env.MASK_EMAIL_LOCAL === 'true';\nconst maskIP = $env.MASK_IP === 'true';\nconst maskLastDigits = parseInt($env.MASK_ID_LAST_DIGITS) || 4;\n\n// Helper: Mask email (keep first char + domain)\nfunction maskEmail(email) {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return `${local[0]}***@${domain}`;\n}\n\n// Helper: Mask IP (keep first 3 octets for IPv4)\nfunction maskIPAddress(ip) {\n  if (!ip) return ip;\n  if (ip.includes(':')) {\n    // IPv6: keep first 4 groups\n    const parts = ip.split(':');\n    return parts.slice(0, 4).join(':') + ':****';\n  } else {\n    // IPv4: keep first 3 octets\n    const parts = ip.split('.');\n    return parts.slice(0, 3).join('.') + '.***';\n  }\n}\n\n// Helper: Mask ID (keep last N digits only)\nfunction maskID(id, keepLast = 4) {\n  if (!id) return id;\n  const str = String(id);\n  if (str.length <= keepLast) return str;\n  return '***' + str.slice(-keepLast);\n}\n\n// Helper: Recursively mask payload fields\nfunction maskPayload(obj, depth = 0) {\n  if (depth > 5 || !obj || typeof obj !== 'object') return obj;\n  \n  const masked = Array.isArray(obj) ? [] : {};\n  \n  for (const [key, value] of Object.entries(obj)) {\n    const keyLower = key.toLowerCase();\n    \n    // Redact highly sensitive fields entirely\n    if (keyLower.includes('ssn') || keyLower.includes('password') || \n        keyLower.includes('token') || keyLower.includes('secret') ||\n        keyLower.includes('credit_card') || keyLower.includes('cvv')) {\n      masked[key] = '[REDACTED]';\n      continue;\n    }\n    \n    // Mask email fields\n    if (keyLower.includes('email') && typeof value === 'string' && maskEmailLocal) {\n      masked[key] = maskEmail(value);\n      continue;\n    }\n    \n    // Mask patient/user IDs (keep last N)\n    if ((keyLower.includes('patient_id') || keyLower.includes('user_id') || \n         keyLower.includes('member_id') || keyLower.includes('mrn')) && value) {\n      masked[key] = maskID(value, maskLastDigits);\n      continue;\n    }\n    \n    // Mask phone numbers (keep last 4)\n    if (keyLower.includes('phone') && value) {\n      masked[key] = maskID(value, 4);\n      continue;\n    }\n    \n    // Recursively process nested objects\n    if (typeof value === 'object' && value !== null) {\n      masked[key] = maskPayload(value, depth + 1);\n    } else {\n      masked[key] = value;\n    }\n  }\n  \n  return masked;\n}\n\n// Apply masking to actor fields\nif (maskEmailLocal && event.actor_id && event.actor_id.includes('@')) {\n  event.actor_id_masked = maskEmail(event.actor_id);\n  event.actor_id = event.actor_id_masked;\n}\n\nif (maskIP && event.actor_ip) {\n  event.actor_ip_masked = maskIPAddress(event.actor_ip);\n  event.actor_ip = event.actor_ip_masked;\n}\n\n// Apply masking to resource_id\nif (event.resource_id) {\n  event.resource_id_masked = maskID(event.resource_id, maskLastDigits);\n  event.resource_id = event.resource_id_masked;\n}\n\n// Mask payload recursively\nevent.payload_json = maskPayload(event.payload_json);\n\n// Remove original_event to prevent PHI leakage\ndelete event.original_event;\n\n// Add PHI handling metadata\nevent.phi_masked = true;\nevent.masking_applied = {\n  email: maskEmailLocal,\n  ip: maskIP,\n  id_last_digits: maskLastDigits\n};\n\nreturn event;"
+      },
+      "id": "903",
+      "name": "PHI Minimization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "notes": "Applies HIPAA-compliant data minimization: masks emails (first char + ***), IPs (/24), IDs (last 4 digits), redacts SSN/passwords/tokens entirely. Recursively processes payload."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 904 - Calculate Cryptographic Hash Chain\n// Implements blockchain-style hash chain for tamper detection\n\nconst crypto = require('crypto');\nconst event = $input.first().json;\n\n// Retrieve previous hash from context or database\n// In production, query: SELECT record_hash FROM audit_log ORDER BY ts DESC LIMIT 1\nlet prev_hash = $context.get('last_hash') || $env.GENESIS_HASH || '0000000000000000000000000000000000000000000000000000000000000000';\n\n// For database lookup (placeholder - actual implementation depends on backend)\n// This would be replaced with actual DB query in Node 906\nevent.prev_hash = prev_hash;\n\n// Create canonical representation for hashing\n// Include all critical fields in deterministic order\nconst canonical = {\n  audit_id: event.audit_id,\n  ts: event.ts,\n  module: event.module,\n  event: event.event,\n  severity: event.severity,\n  actor_type: event.actor_type,\n  actor_id: event.actor_id,\n  resource_type: event.resource_type,\n  resource_id: event.resource_id,\n  payload_hash: crypto.createHash('sha256')\n    .update(JSON.stringify(event.payload_json))\n    .digest('hex'),\n  prev_hash: prev_hash\n};\n\n// Compute record hash: SHA-256(canonical JSON + prev_hash)\nconst canonical_string = JSON.stringify(canonical);\nconst record_hash = crypto.createHash('sha256')\n  .update(canonical_string)\n  .digest('hex');\n\nevent.record_hash = record_hash;\nevent.canonical = canonical;\n\n// Store current hash for next record\n$context.set('last_hash', record_hash);\n\n// Add hash chain metadata\nevent.hash_algorithm = 'SHA-256';\nevent.hash_includes = Object.keys(canonical);\n\nreturn event;"
+      },
+      "id": "904",
+      "name": "Calculate Hash Chain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "notes": "Computes SHA-256 hash chain: record_hash = hash(canonical_data + prev_hash). Enables tamper detection via blockchain-style verification. Stores hash for next record."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 905 - Determine Storage Backends\n// Route to primary and secondary storage based on config\n\nconst event = $input.first().json;\n\nconst backends = {\n  primary: $env.LOG_PRIMARY || 'postgres',\n  secondary: $env.LOG_SECONDARY || 's3'\n};\n\nevent.backends = backends;\n\n// Calculate retention policy\nconst retentionDays = parseInt($env.RETENTION_DAYS) || 2555; // ~7 years default\nconst expiresAt = new Date(event.ts);\nexpiresAt.setDate(expiresAt.getDate() + retentionDays);\n\nevent.retention = {\n  policy_days: retentionDays,\n  expires_at: expiresAt.toISOString()\n};\n\n// Add backend routing metadata\nevent.route_to = {\n  postgres: backends.primary === 'postgres',\n  sheets: backends.primary === 'sheets',\n  airtable: backends.primary === 'airtable',\n  s3: backends.secondary === 's3',\n  gdrive: backends.secondary === 'gdrive'\n};\n\nreturn event;"
+      },
+      "id": "905",
+      "name": "Determine Backends",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "notes": "Determines storage backends from env (primary: postgres/sheets/airtable, secondary: s3/gdrive). Calculates retention policy (default 7 years) and expiration timestamp."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.backends.primary}}",
+              "operation": "equals",
+              "value2": "postgres"
+            }
+          ]
+        }
+      },
+      "id": "906",
+      "name": "Route: Primary Storage",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1340, 300],
+      "notes": "Routes to appropriate primary storage: PostgreSQL (recommended), Google Sheets (lightweight), or Airtable (medium volume)."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- First, get the previous hash\nWITH prev AS (\n  SELECT record_hash as prev_hash\n  FROM {{$env.PG_TABLE}}\n  ORDER BY ts DESC\n  LIMIT 1\n)\nINSERT INTO {{$env.PG_TABLE}} (\n  audit_id,\n  ts,\n  module,\n  event,\n  severity,\n  actor_type,\n  actor_id,\n  actor_ip,\n  resource_type,\n  resource_id,\n  payload_json,\n  record_hash,\n  prev_hash,\n  retention_expires_at,\n  trace_id,\n  created_at\n) VALUES (\n  '{{$json.audit_id}}',\n  '{{$json.ts}}',\n  '{{$json.module}}',\n  '{{$json.event}}',\n  '{{$json.severity}}',\n  '{{$json.actor_type}}',\n  '{{$json.actor_id}}',\n  '{{$json.actor_ip}}',\n  '{{$json.resource_type}}',\n  '{{$json.resource_id}}',\n  '{{JSON.stringify($json.payload_json)}}'::jsonb,\n  '{{$json.record_hash}}',\n  COALESCE((SELECT prev_hash FROM prev), '{{$env.GENESIS_HASH}}'),\n  '{{$json.retention.expires_at}}'::timestamp,\n  '{{$json.trace_id}}',\n  NOW()\n)\nON CONFLICT (audit_id) DO NOTHING\nRETURNING audit_id, ts, record_hash;",
+        "options": {}
+      },
+      "id": "907",
+      "name": "PostgreSQL - Insert",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [1560, 200],
+      "credentials": {
+        "postgres": {
+          "id": "{{$env.POSTGRES_CREDENTIAL_ID}}",
+          "name": "PostgreSQL Audit DB"
+        }
+      },
+      "notes": "Inserts audit record into PostgreSQL with hash chain. Uses ON CONFLICT for idempotency. Automatically retrieves prev_hash from last record. Returns audit_id for verification."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_TAB}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "audit_id": "={{$json.audit_id}}",
+            "ts": "={{$json.ts}}",
+            "module": "={{$json.module}}",
+            "event": "={{$json.event}}",
+            "severity": "={{$json.severity}}",
+            "actor_type": "={{$json.actor_type}}",
+            "actor_id": "={{$json.actor_id}}",
+            "actor_ip": "={{$json.actor_ip}}",
+            "resource_type": "={{$json.resource_type}}",
+            "resource_id": "={{$json.resource_id}}",
+            "payload_json": "={{JSON.stringify($json.payload_json)}}",
+            "record_hash": "={{$json.record_hash}}",
+            "prev_hash": "={{$json.prev_hash}}",
+            "retention_expires_at": "={{$json.retention.expires_at}}",
+            "trace_id": "={{$json.trace_id}}"
+          }
+        },
+        "options": {}
+      },
+      "id": "908",
+      "name": "Google Sheets - Append",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1560, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "={{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "Google Sheets OAuth2"
+        }
+      },
+      "notes": "Appends audit record to Google Sheets. Suitable for lightweight deployments (<10k records). All fields flattened to columns with hash chain preserved."
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "baseId": {
+          "__rl": true,
+          "value": "={{$env.AIRTABLE_BASE_ID}}",
+          "mode": "id"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "={{$env.AIRTABLE_TABLE}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "audit_id": "={{$json.audit_id}}",
+            "ts": "={{$json.ts}}",
+            "module": "={{$json.module}}",
+            "event": "={{$json.event}}",
+            "severity": "={{$json.severity}}",
+            "actor_type": "={{$json.actor_type}}",
+            "actor_id": "={{$json.actor_id}}",
+            "actor_ip": "={{$json.actor_ip}}",
+            "resource_type": "={{$json.resource_type}}",
+            "resource_id": "={{$json.resource_id}}",
+            "payload_json": "={{JSON.stringify($json.payload_json)}}",
+            "record_hash": "={{$json.record_hash}}",
+            "prev_hash": "={{$json.prev_hash}}",
+            "retention_expires_at": "={{$json.retention.expires_at}}",
+            "trace_id": "={{$json.trace_id}}"
+          }
+        },
+        "options": {}
+      },
+      "id": "909",
+      "name": "Airtable - Create",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [1560, 400],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "={{$env.AIRTABLE_CREDENTIAL_ID}}",
+          "name": "Airtable Personal Access Token"
+        }
+      },
+      "notes": "Creates audit record in Airtable. Good for medium-volume deployments with relational needs. Supports rich field types and views."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.backends.secondary}}",
+              "operation": "equals",
+              "value2": "s3"
+            }
+          ]
+        }
+      },
+      "id": "910",
+      "name": "Route: Secondary Archive",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1780, 300],
+      "notes": "Routes to cold storage archive: S3 (recommended, encrypted JSONL) or Google Drive (fallback). Enables long-term immutable storage."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 911 - Prepare S3 Archive Record\n// Format as single-line JSONL for append-only log\n\nconst event = $input.first().json;\n\n// Create JSONL entry (single-line JSON)\nconst jsonl_record = JSON.stringify({\n  audit_id: event.audit_id,\n  ts: event.ts,\n  module: event.module,\n  event: event.event,\n  severity: event.severity,\n  actor: {\n    type: event.actor_type,\n    id: event.actor_id,\n    ip: event.actor_ip\n  },\n  resource: {\n    type: event.resource_type,\n    id: event.resource_id\n  },\n  payload: event.payload_json,\n  hashes: {\n    record_hash: event.record_hash,\n    prev_hash: event.prev_hash,\n    algorithm: event.hash_algorithm\n  },\n  retention: event.retention,\n  trace_id: event.trace_id,\n  archived_at: new Date().toISOString()\n});\n\n// Determine S3 key with partitioning\nconst date = new Date(event.ts);\nconst partitionFormat = $env.S3_PARTITION_FORMAT || 'yyyy/MM/dd/HH';\n\nconst yyyy = date.getUTCFullYear();\nconst MM = String(date.getUTCMonth() + 1).padStart(2, '0');\nconst dd = String(date.getUTCDate()).padStart(2, '0');\nconst HH = String(date.getUTCHours()).padStart(2, '0');\n\nlet partition;\nif (partitionFormat === 'yyyy/MM/dd/HH') {\n  partition = `${yyyy}/${MM}/${dd}/${HH}`;\n} else if (partitionFormat === 'yyyy/MM/dd') {\n  partition = `${yyyy}/${MM}/${dd}`;\n} else if (partitionFormat === 'yyyy/MM') {\n  partition = `${yyyy}/${MM}`;\n} else {\n  partition = `${yyyy}/${MM}/${dd}`; // default\n}\n\nconst s3_key = `${$env.S3_PREFIX || 'audit/'}${partition}/audit.jsonl`;\n\nevent.s3_archive = {\n  bucket: $env.S3_BUCKET,\n  key: s3_key,\n  jsonl_record: jsonl_record,\n  partition: partition,\n  server_side_encryption: $env.S3_SERVER_SIDE_ENCRYPTION || 'AES256'\n};\n\nreturn event;"
+      },
+      "id": "911",
+      "name": "Prepare S3 Archive",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 200],
+      "notes": "Formats audit record as single-line JSONL for S3 append. Partitions by date/hour (yyyy/MM/dd/HH) for efficient queries. Includes full hash chain and retention metadata."
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{$json.s3_archive.bucket}}",
+        "fileName": "={{$json.s3_archive.key}}",
+        "binaryData": false,
+        "fileContent": "={{$json.s3_archive.jsonl_record}}\n",
+        "options": {
+          "serverSideEncryption": "={{$json.s3_archive.server_side_encryption}}",
+          "acl": "private"
+        }
+      },
+      "id": "912",
+      "name": "S3 - Append Archive",
+      "type": "n8n-nodes-base.aws.s3",
+      "typeVersion": 1,
+      "position": [2220, 200],
+      "credentials": {
+        "aws": {
+          "id": "={{$env.AWS_CREDENTIAL_ID}}",
+          "name": "AWS S3"
+        }
+      },
+      "notes": "Appends JSONL line to S3 archive with server-side encryption (AES256/KMS). Creates partitioned structure for efficient Athena queries. Private ACL for security."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 913 - Generate Signed URL for Archive\n// Creates time-limited signed URL for secure archive access\n\nconst AWS = require('aws-sdk');\nconst event = $input.first().json;\n\n// Configure S3 client\nconst s3 = new AWS.S3({\n  accessKeyId: $env.S3_ACCESS_KEY_ID,\n  secretAccessKey: $env.S3_SECRET_ACCESS_KEY,\n  region: $env.S3_REGION || 'us-east-1'\n});\n\nconst params = {\n  Bucket: event.s3_archive.bucket,\n  Key: event.s3_archive.key,\n  Expires: parseInt($env.SIGNED_URL_TTL_SECONDS) || 600 // 10 minutes default\n};\n\n// Generate signed URL\nconst signed_url = s3.getSignedUrl('getObject', params);\n\nevent.s3_archive.signed_url = signed_url;\nevent.s3_archive.signed_url_expires_at = new Date(\n  Date.now() + (params.Expires * 1000)\n).toISOString();\n\nreturn event;"
+      },
+      "id": "913",
+      "name": "Generate Signed URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 200],
+      "notes": "Generates time-limited signed URL (default 10min) for secure S3 archive access. Enables auditors to retrieve records without permanent credentials."
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "folderId": {
+          "__rl": true,
+          "value": "={{$env.GDRIVE_FOLDER_ID}}",
+          "mode": "id"
+        },
+        "name": "={{$json.audit_id}}.json",
+        "binaryData": false,
+        "fileContent": "={{JSON.stringify($json, null, 2)}}",
+        "options": {}
+      },
+      "id": "914",
+      "name": "Google Drive - Upload",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [2000, 300],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "={{$env.GDRIVE_CREDENTIAL_ID}}",
+          "name": "Google Drive OAuth2"
+        }
+      },
+      "notes": "Fallback archive to Google Drive. Uploads full audit record as individual JSON file. Suitable for smaller deployments or when S3 is unavailable."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 915 - Evaluate Alert Conditions\n// Determines if alerts should be triggered based on severity, event type, time\n\nconst event = $input.first().json;\n\n// Parse alert configuration\nconst alertSeverities = ($env.ALERT_SEVERITY || 'warning,high,critical').split(',').map(s => s.trim());\nconst watchEvents = ($env.WATCH_EVENTS || '').split(',').map(e => e.trim()).filter(e => e);\n\nconst alerts = {\n  triggered: [],\n  conditions_met: []\n};\n\n// Check 1: Severity-based alert\nif (alertSeverities.includes(event.severity)) {\n  alerts.triggered.push('severity_threshold');\n  alerts.conditions_met.push(`Severity ${event.severity} meets alert threshold`);\n}\n\n// Check 2: Watch event list\nif (watchEvents.includes(event.event)) {\n  alerts.triggered.push('watch_event');\n  alerts.conditions_met.push(`Event ${event.event} is in watch list`);\n}\n\n// Check 3: After-hours PHI access\nif ($env.AFTER_HOURS_START && $env.AFTER_HOURS_END) {\n  const eventTime = new Date(event.ts);\n  const eventHour = eventTime.getUTCHours(); // Use UTC or convert to clinic timezone\n  \n  const afterHoursStart = parseInt($env.AFTER_HOURS_START.split(':')[0]);\n  const afterHoursEnd = parseInt($env.AFTER_HOURS_END.split(':')[0]);\n  \n  const isAfterHours = eventHour >= afterHoursStart || eventHour < afterHoursEnd;\n  \n  // Check if this is PHI access\n  const phiEvents = ['phi_access', 'document_view', 'patient_record_access', 'document_export'];\n  const isPHIAccess = phiEvents.includes(event.event) || \n                      event.resource_type === 'patient_record' ||\n                      event.resource_type === 'document';\n  \n  if (isAfterHours && isPHIAccess) {\n    alerts.triggered.push('after_hours_phi_access');\n    alerts.conditions_met.push(`PHI access at ${eventHour}:00 UTC (after hours)`);\n  }\n}\n\n// Check 4: Failed authentication\nif (event.event === 'login_failure' || event.event === 'auth_failure') {\n  alerts.triggered.push('failed_auth');\n  alerts.conditions_met.push('Authentication failure detected');\n}\n\n// Check 5: Bulk operations\nif (event.event === 'bulk_download' || event.event === 'bulk_export' || event.event === 'mass_delete') {\n  alerts.triggered.push('bulk_operation');\n  alerts.conditions_met.push(`Bulk operation: ${event.event}`);\n}\n\n// Add alert metadata\nevent.alerts = {\n  enabled: alerts.triggered.length > 0,\n  triggered: alerts.triggered.length > 0 ? alerts.triggered : ['none'],\n  conditions_met: alerts.conditions_met,\n  alert_count: alerts.triggered.length,\n  evaluated_at: new Date().toISOString()\n};\n\nreturn event;"
+      },
+      "id": "915",
+      "name": "Evaluate Alert Conditions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 600],
+      "notes": "Evaluates alert triggers: severity threshold (warning/high/critical), watch events, after-hours PHI access, failed auth, bulk operations. Returns alerts metadata."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.alerts.enabled}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "916",
+      "name": "Route: Send Alerts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2000, 600],
+      "notes": "Conditional routing: sends alerts to Slack and Email if any alert conditions are met. Bypasses alert nodes if no alerts triggered."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "authentication": "none",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "🚨 *Audit Alert: {{$json.alerts.triggered.join(\", \")}}*"
+            },
+            {
+              "name": "attachments",
+              "value": "=[{\n  \"color\": \"{{$json.severity === 'critical' ? 'danger' : $json.severity === 'high' ? 'warning' : '#ff9900'}}\",\n  \"title\": \"Audit Event: {{$json.event}}\",\n  \"fields\": [\n    {\"title\": \"Module\", \"value\": \"{{$json.module}}\", \"short\": true},\n    {\"title\": \"Severity\", \"value\": \"{{$json.severity}}\", \"short\": true},\n    {\"title\": \"Actor\", \"value\": \"{{$json.actor_type}}: {{$json.actor_id}}\", \"short\": true},\n    {\"title\": \"Resource\", \"value\": \"{{$json.resource_type}}: {{$json.resource_id}}\", \"short\": true},\n    {\"title\": \"Timestamp\", \"value\": \"{{$json.ts}}\", \"short\": true},\n    {\"title\": \"Trace ID\", \"value\": \"{{$json.trace_id}}\", \"short\": true},\n    {\"title\": \"Conditions Met\", \"value\": \"{{$json.alerts.conditions_met.join('\\\\n')}}\", \"short\": false}\n  ],\n  \"footer\": \"Aigent Module 09 - Audit ID: {{$json.audit_id}}\",\n  \"ts\": {{Math.floor(Date.parse($json.ts) / 1000)}}\n}]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "917",
+      "name": "Slack - Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2220, 550],
+      "notes": "Sends formatted Slack alert with severity color-coding, audit details, and conditions met. Includes audit_id and trace_id for investigation."
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{$env.ALERT_FROM_EMAIL || 'noreply@yourclinic.com'}}",
+        "toEmail": "={{$env.ALERT_EMAIL}}",
+        "subject": "🚨 Audit Alert: {{$json.event}} [{{$json.severity}}]",
+        "emailType": "html",
+        "message": "=<html>\n<body style=\"font-family: Arial, sans-serif; line-height: 1.6;\">\n  <h2 style=\"color: #d9534f;\">🚨 Audit Alert Triggered</h2>\n  \n  <table style=\"border-collapse: collapse; width: 100%; margin: 20px 0;\">\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Event</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\">{{$json.event}}</td>\n    </tr>\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Module</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\">{{$json.module}}</td>\n    </tr>\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Severity</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\"><strong style=\"color: #d9534f;\">{{$json.severity.toUpperCase()}}</strong></td>\n    </tr>\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Actor</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\">{{$json.actor_type}}: {{$json.actor_id}} ({{$json.actor_ip}})</td>\n    </tr>\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Resource</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\">{{$json.resource_type}}: {{$json.resource_id}}</td>\n    </tr>\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Timestamp</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\">{{$json.ts}}</td>\n    </tr>\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Audit ID</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\"><code>{{$json.audit_id}}</code></td>\n    </tr>\n    <tr>\n      <td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold; background-color: #f5f5f5;\">Trace ID</td>\n      <td style=\"padding: 8px; border: 1px solid #ddd;\"><code>{{$json.trace_id}}</code></td>\n    </tr>\n  </table>\n  \n  <h3>Alert Conditions Met:</h3>\n  <ul>\n    {{#each $json.alerts.conditions_met}}\n    <li>{{this}}</li>\n    {{/each}}\n  </ul>\n  \n  <hr style=\"margin: 30px 0;\">\n  <p style=\"color: #666; font-size: 12px;\">\n    This is an automated alert from Aigent Module 09 - Compliance & Audit Logging.<br>\n    Generated at {{$now.toISOString()}}\n  </p>\n</body>\n</html>",
+        "options": {}
+      },
+      "id": "918",
+      "name": "Email - Alert",
+      "type": "n8n-nodes-base.sendEmail",
+      "typeVersion": 1,
+      "position": [2220, 650],
+      "credentials": {
+        "smtp": {
+          "id": "={{$env.SMTP_CREDENTIAL_ID}}",
+          "name": "SMTP"
+        }
+      },
+      "notes": "Sends HTML email alert to security team with full audit details, severity, actor, resource, and conditions met. Includes audit_id and trace_id for correlation."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 919 - Build Response\n// Constructs standardized audit_log.json response\n\nconst event = $input.first().json;\n\nconst response = {\n  success: true,\n  audit_id: event.audit_id,\n  ingested_at: event.ingested_at,\n  module: event.module,\n  event: event.event,\n  severity: event.severity,\n  record_hash: event.record_hash,\n  prev_hash: event.prev_hash,\n  backends: {\n    primary: event.backends.primary,\n    secondary: event.backends.secondary\n  },\n  retention: event.retention,\n  alerts_triggered: event.alerts?.triggered || ['none'],\n  metadata: {\n    writer: 'Aigent_Module_09',\n    version: '1.0.0',\n    hash_algorithm: event.hash_algorithm || 'SHA-256',\n    phi_masked: event.phi_masked || false,\n    trace_id: event.trace_id\n  }\n};\n\n// Add S3 archive info if available\nif (event.s3_archive?.signed_url) {\n  response.archive = {\n    url: event.s3_archive.signed_url,\n    expires_at: event.s3_archive.signed_url_expires_at,\n    bucket: event.s3_archive.bucket,\n    key: event.s3_archive.key\n  };\n}\n\nreturn response;"
+      },
+      "id": "919",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 600],
+      "notes": "Constructs standardized audit_log.json response with audit_id, hashes, backends, retention policy, alerts triggered. Includes S3 signed URL if archive enabled."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "X-Audit-ID",
+                "value": "={{$json.audit_id}}"
+              },
+              {
+                "name": "X-Trace-ID",
+                "value": "={{$json.metadata.trace_id}}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "920",
+      "name": "Respond - Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2660, 600],
+      "notes": "Returns 200 OK with standardized audit_log.json response. Includes X-Audit-ID and X-Trace-ID headers for correlation and tracking."
+    },
+    {
+      "parameters": {
+        "functionCode": "// Node 930 - Error Handler\n// Catches and logs errors with dead-letter queue\n\nconst error = $input.first().error;\nconst originalEvent = $input.first().json || {};\n\nconst errorLog = {\n  success: false,\n  error: error?.message || 'Unknown error',\n  error_type: error?.name || 'Error',\n  stage: error?.stage || 'unknown',\n  trace_id: originalEvent.trace_id || `err_${Date.now()}`,\n  timestamp: new Date().toISOString(),\n  original_event: originalEvent,\n  stack_trace: error?.stack || null,\n  metadata: {\n    module: 'Aigent_Module_09',\n    version: '1.0.0',\n    handler: 'error_handler'\n  }\n};\n\n// Log to console if debug mode\nif ($env.DEBUG_MODE === 'true') {\n  console.error('Audit logging error:', errorLog);\n}\n\nreturn errorLog;"
+      },
+      "id": "930",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2440, 800],
+      "notes": "Catches all workflow errors, constructs error log with trace_id, stage, and original event. Routes to dead-letter queue for manual investigation."
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "={{$env.S3_BUCKET}}",
+        "fileName": "={{$env.S3_PREFIX || 'audit/'}}dead-letter/{{$json.trace_id}}.json",
+        "binaryData": false,
+        "fileContent": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "serverSideEncryption": "AES256",
+          "acl": "private"
+        }
+      },
+      "id": "931",
+      "name": "S3 - Dead Letter Queue",
+      "type": "n8n-nodes-base.aws.s3",
+      "typeVersion": 1,
+      "position": [2660, 800],
+      "credentials": {
+        "aws": {
+          "id": "={{$env.AWS_CREDENTIAL_ID}}",
+          "name": "AWS S3"
+        }
+      },
+      "notes": "Writes failed audit events to S3 dead-letter queue for manual investigation. Preserves original event and error details with encryption."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 500,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "X-Error-Trace-ID",
+                "value": "={{$json.trace_id}}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "932",
+      "name": "Respond - Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2880, 800],
+      "notes": "Returns 500 error response with error details and trace_id for debugging. Includes X-Error-Trace-ID header for correlation."
+    }
+  ],
+  "connections": {
+    "Webhook - Audit Event Receiver": {
+      "main": [
+        [
+          {
+            "node": "Validate & Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Normalize": {
+      "main": [
+        [
+          {
+            "node": "PHI Minimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PHI Minimization": {
+      "main": [
+        [
+          {
+            "node": "Calculate Hash Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Hash Chain": {
+      "main": [
+        [
+          {
+            "node": "Determine Backends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Backends": {
+      "main": [
+        [
+          {
+            "node": "Route: Primary Storage",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Evaluate Alert Conditions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Primary Storage": {
+      "main": [
+        [
+          {
+            "node": "PostgreSQL - Insert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets - Append",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Airtable - Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PostgreSQL - Insert": {
+      "main": [
+        [
+          {
+            "node": "Route: Secondary Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Append": {
+      "main": [
+        [
+          {
+            "node": "Route: Secondary Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Create": {
+      "main": [
+        [
+          {
+            "node": "Route: Secondary Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Secondary Archive": {
+      "main": [
+        [
+          {
+            "node": "Prepare S3 Archive",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Drive - Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare S3 Archive": {
+      "main": [
+        [
+          {
+            "node": "S3 - Append Archive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S3 - Append Archive": {
+      "main": [
+        [
+          {
+            "node": "Generate Signed URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Signed URL": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive - Upload": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Alert Conditions": {
+      "main": [
+        [
+          {
+            "node": "Route: Send Alerts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Send Alerts": {
+      "main": [
+        [
+          {
+            "node": "Slack - Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email - Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack - Alert": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email - Alert": {
+      "main": [
+        [
+          {
+            "node": "Build Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Response": {
+      "main": [
+        [
+          {
+            "node": "Respond - Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "S3 - Dead Letter Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S3 - Dead Letter Queue": {
+      "main": [
+        [
+          {
+            "node": "Respond - Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "={{$env.ERROR_WORKFLOW_ID}}"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "id": "audit",
+      "name": "audit"
+    },
+    {
+      "id": "compliance",
+      "name": "compliance"
+    },
+    {
+      "id": "hipaa",
+      "name": "hipaa"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-10-30T14:00:00.000Z",
+  "versionId": "1.0.0"
+}

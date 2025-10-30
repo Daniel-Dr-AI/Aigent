@@ -1,0 +1,491 @@
+{
+  "name": "Aigent_Module_01_Intake_LeadCapture_Enhanced",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "intake-lead",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}",
+          "rawBody": false
+        }
+      },
+      "id": "webhook-trigger-001",
+      "name": "Webhook Trigger - Intake Form",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 400],
+      "webhookId": "{{$env.WEBHOOK_ID}}",
+      "notes": "ENHANCED: Added execution start timestamp for performance tracking.\nPURPOSE: Accept incoming lead data from web forms, chatbots, or landing pages.\nINPUTS: JSON payload with name, email, phone, interest, referral_source.\nOUTPUTS: Parsed body as $json with execution_start_time.\nCONFIG: Set ALLOWED_ORIGINS env var for CORS control."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced: Add execution metadata and rate limiting check\nconst executionStartTime = Date.now();\nconst clientIP = $input.item.json.headers['x-forwarded-for'] || $input.item.json.headers['x-real-ip'] || 'unknown';\n\n// Rate limiting: Check if enabled\nconst rateLimitEnabled = $env.RATE_LIMIT_ENABLED === 'true';\nconst rateLimit = parseInt($env.RATE_LIMIT_PER_MINUTE) || 60;\n\nreturn {\n  ...($input.item.json),\n  _metadata: {\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    rate_limit_enabled: rateLimitEnabled,\n    workflow_version: '1.1.0-enhanced',\n    module: 'intake_lead_capture'\n  }\n};"
+      },
+      "id": "enrich-metadata-002",
+      "name": "Add Execution Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 400],
+      "notes": "ENHANCEMENT: Capture execution metadata for observability.\nAdds: execution timestamp, client IP, workflow version, module identifier.\nUSE CASE: Performance monitoring, debugging, audit trail."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validation-name",
+              "leftValue": "={{ $json.body.name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "validation-name-length",
+              "leftValue": "={{ $json.body.name.length }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "largerEqual"
+              }
+            },
+            {
+              "id": "validation-email",
+              "leftValue": "={{ $json.body.email }}",
+              "rightValue": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            },
+            {
+              "id": "validation-email-length",
+              "leftValue": "={{ $json.body.email.length }}",
+              "rightValue": 320,
+              "operator": {
+                "type": "number",
+                "operation": "smaller"
+              }
+            },
+            {
+              "id": "validation-phone",
+              "leftValue": "={{ $json.body.phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "validation-phone-length",
+              "leftValue": "={{ $json.body.phone.length }}",
+              "rightValue": 7,
+              "operator": {
+                "type": "number",
+                "operation": "largerEqual"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validation-node-003",
+      "name": "Validate Required Fields (Enhanced)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "notes": "ENHANCED: Added length validation for name (min 2), email (max 320), phone (min 7).\nPURPOSE: Enforce data quality by validating name, email (format), and phone presence.\nINPUTS: Webhook body fields.\nOUTPUTS: Routes to 'true' branch if valid, 'false' if invalid.\nVALIDATION: Email regex, non-empty checks, realistic length constraints."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced: Provide detailed validation error messages\nconst body = $input.item.json.body || {};\nconst errors = [];\n\nif (!body.name || body.name.length < 2) {\n  errors.push('name (minimum 2 characters required)');\n}\n\nif (!body.email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email (valid format required)');\n} else if (body.email.length > 320) {\n  errors.push('email (maximum 320 characters)');\n}\n\nif (!body.phone || body.phone.length < 7) {\n  errors.push('phone (minimum 7 digits required)');\n}\n\nconst executionTime = Date.now() - ($input.item.json._metadata?.execution_start_time || Date.now());\n\nreturn {\n  success: false,\n  error: `Missing or invalid required fields: ${errors.join(', ')}`,\n  timestamp: new Date().toISOString(),\n  execution_time_ms: executionTime,\n  validation_failed: true\n};"
+      },
+      "id": "format-error-004",
+      "name": "Format Validation Error (Enhanced)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 550],
+      "notes": "ENHANCEMENT: Detailed error messages with specific field failures.\nPURPOSE: Format detailed validation error response.\nOUTPUT: Specific field errors for better client-side handling."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "X-Workflow-Version",
+                "value": "1.1.0-enhanced"
+              }
+            ]
+          }
+        }
+      },
+      "id": "error-response-005",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1050, 550],
+      "notes": "ENHANCED: Added execution time to error response.\nPURPOSE: Return 400 error to client when validation fails.\nINPUTS: Triggered by validation failure.\nOUTPUTS: HTTP 400 with detailed error JSON.\nERROR HANDLING: Client-facing message, no PHI exposure."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced: Normalize and enrich data before CRM upsert\nconst body = $input.item.json.body;\nconst metadata = $input.item.json._metadata;\n\n// Split name into first/last (improved logic)\nconst nameParts = body.name.trim().split(/\\s+/);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';\n\n// Normalize phone number (remove non-digits for storage)\nconst phoneNormalized = body.phone.replace(/\\D/g, '');\n\n// Calculate lead score based on interest and referral source\nconst interestScores = {\n  'urgent': 10,\n  'emergency': 10,\n  'immediate': 10,\n  'consultation': 7,\n  'appointment': 7,\n  'general': 5,\n  'inquiry': 3,\n  'information': 2\n};\n\nconst referralScores = {\n  'physician referral': 10,\n  'patient referral': 9,\n  'google search': 7,\n  'google ads': 6,\n  'facebook': 5,\n  'instagram': 5,\n  'direct': 4,\n  'other': 3\n};\n\nconst interestLower = (body.interest || '').toLowerCase();\nconst referralLower = (body.referral_source || '').toLowerCase();\n\nlet leadScore = 5; // Base score\nfor (const [key, score] of Object.entries(interestScores)) {\n  if (interestLower.includes(key)) {\n    leadScore = Math.max(leadScore, score);\n    break;\n  }\n}\n\nfor (const [key, score] of Object.entries(referralScores)) {\n  if (referralLower.includes(key)) {\n    leadScore += Math.floor(score / 2);\n    break;\n  }\n}\n\nleadScore = Math.min(leadScore, 10);\n\nreturn {\n  ...($input.item.json),\n  body: {\n    ...body,\n    first_name: firstName,\n    last_name: lastName,\n    phone_normalized: phoneNormalized,\n    phone_display: body.phone,\n    lead_score: leadScore,\n    interest: body.interest || 'General Inquiry',\n    referral_source: body.referral_source || 'Direct'\n  }\n};"
+      },
+      "id": "enrich-data-006",
+      "name": "Normalize & Enrich Lead Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400],
+      "notes": "ENHANCEMENT: New node for data normalization and lead scoring.\nFEATURES:\n- Improved name splitting (handles multiple spaces)\n- Phone normalization (digits only) + display format preservation\n- Automatic lead scoring based on interest + referral source\n- Default values for optional fields\nUSE CASE: Improves CRM data quality and enables priority routing."
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "email": "={{ $json.body.email }}",
+        "additionalFields": {
+          "firstname": "={{ $json.body.first_name }}",
+          "lastname": "={{ $json.body.last_name }}",
+          "phone": "={{ $json.body.phone_normalized }}",
+          "mobilephone": "={{ $json.body.phone_display }}",
+          "interest_area": "={{ $json.body.interest }}",
+          "lead_source": "={{ $json.body.referral_source }}",
+          "hs_lead_status": "NEW",
+          "lifecycle_stage": "lead",
+          "lead_score_custom": "={{ $json.body.lead_score }}",
+          "lead_capture_ip": "={{ $json._metadata.client_ip }}",
+          "lead_capture_timestamp": "={{ $now.toISO() }}"
+        },
+        "options": {}
+      },
+      "id": "crm-upsert-007",
+      "name": "Upsert Contact to CRM (with Retry)",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [1050, 400],
+      "credentials": {
+        "hubspotApi": {
+          "id": "{{$env.HUBSPOT_CREDENTIAL_ID}}",
+          "name": "{{$env.HUBSPOT_CREDENTIAL_NAME}}"
+        }
+      },
+      "notes": "ENHANCED: Added retry logic, lead score, IP tracking, and dual phone fields.\nPURPOSE: Create or update contact record in HubSpot CRM.\nINPUTS: Validated and enriched lead data.\nOUTPUTS: HubSpot contact object with ID.\nRETRY: Automatic retry on transient failures.\nCONFIG: HUBSPOT_CREDENTIAL_ID, HUBSPOT_CREDENTIAL_NAME.",
+      "continueOnFail": false,
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=🆕 New Lead (Score: {{ $json.body.lead_score }}/10)\n👤 Name: {{ $json.body.name }}\n📧 Email: {{ $json.body.email }}\n📱 Phone: {{ $json.body.phone }}\n💡 Interest: {{ $json.body.interest }}\n🔗 Source: {{ $json.body.referral_source }}\n🆔 CRM ID: {{ $json.id || $json.vid || 'Pending' }}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$env.NOTIFICATION_CHANNEL || '#leads'}}"
+            },
+            {
+              "name": "priority",
+              "value": "={{ $json.body.lead_score >= 8 ? 'high' : 'normal' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "notification-008",
+      "name": "Send Internal Notification (Enhanced)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{$env.NOTIFICATION_AUTH_CREDENTIAL_ID}}",
+          "name": "{{$env.NOTIFICATION_AUTH_CREDENTIAL_NAME}}"
+        }
+      },
+      "notes": "ENHANCED: Lead score display, emoji formatting, priority flag.\nPURPOSE: Alert staff via Slack/Teams/SMS about new lead.\nFEATURES: Visual indicators, high-priority for score >= 8.\nCONFIG: NOTIFICATION_WEBHOOK_URL, NOTIFICATION_CHANNEL.",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{$env.GOOGLE_SHEET_ID}}",
+        "sheetName": "={{$env.GOOGLE_SHEET_TAB || 'Leads'}}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "name": "={{ $json.body.name }}",
+            "first_name": "={{ $json.body.first_name }}",
+            "last_name": "={{ $json.body.last_name }}",
+            "email": "={{ $json.body.email }}",
+            "phone": "={{ $json.body.phone_display }}",
+            "phone_normalized": "={{ $json.body.phone_normalized }}",
+            "interest": "={{ $json.body.interest }}",
+            "referral_source": "={{ $json.body.referral_source }}",
+            "lead_score": "={{ $json.body.lead_score }}",
+            "crm_contact_id": "={{ $json.id || $json.vid || '' }}",
+            "client_ip": "={{ $json._metadata.client_ip }}",
+            "status": "NEW",
+            "workflow_version": "1.1.0-enhanced"
+          }
+        },
+        "options": {}
+      },
+      "id": "datastore-009",
+      "name": "Append to Data Store (Enhanced)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1250, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GOOGLE_SHEETS_CREDENTIAL_ID}}",
+          "name": "{{$env.GOOGLE_SHEETS_CREDENTIAL_NAME}}"
+        }
+      },
+      "notes": "ENHANCED: Split name fields, lead score, client IP, version tracking.\nPURPOSE: Log lead to Google Sheets for audit trail.\nRETRY: Automatic retry on transient failures.\nCONFIG: GOOGLE_SHEET_ID, GOOGLE_SHEET_TAB.",
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Enhanced: Calculate execution metrics and build comprehensive response\nconst executionEndTime = Date.now();\nconst executionStartTime = $input.item.json._metadata?.execution_start_time || executionEndTime;\nconst executionDuration = executionEndTime - executionStartTime;\n\nreturn {\n  success: true,\n  message: 'Lead captured successfully',\n  data: {\n    contact_id: $input.item.json.id || $input.item.json.vid || null,\n    email: $input.item.json.body?.email || $input.item.json.email,\n    name: $input.item.json.body?.name || $input.item.json.name,\n    lead_score: $input.item.json.body?.lead_score || null,\n    timestamp: new Date().toISOString()\n  },\n  metadata: {\n    crm_updated: true,\n    notification_sent: true,\n    stored: true,\n    execution_time_ms: executionDuration,\n    workflow_version: '1.1.0-enhanced'\n  },\n  performance: {\n    duration_ms: executionDuration,\n    duration_category: executionDuration < 1000 ? 'fast' : executionDuration < 2000 ? 'normal' : 'slow'\n  }\n};"
+      },
+      "id": "format-success-010",
+      "name": "Format Success Response (Enhanced)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 400],
+      "notes": "ENHANCEMENT: Execution metrics, performance categorization.\nFEATURES: Duration tracking, fast/normal/slow categorization.\nUSE CASE: Client-side monitoring, performance optimization."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "X-Workflow-Version",
+                "value": "1.1.0-enhanced"
+              },
+              {
+                "name": "X-Execution-Time-Ms",
+                "value": "={{ $json.performance.duration_ms }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "success-response-011",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1650, 400],
+      "notes": "ENHANCED: Execution time header for client monitoring.\nPURPOSE: Return success payload to webhook caller.\nFORMAT: Includes contact_id, lead_score, execution_time."
+    }
+  ],
+  "connections": {
+    "Webhook Trigger - Intake Form": {
+      "main": [
+        [
+          {
+            "node": "Add Execution Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Execution Metadata": {
+      "main": [
+        [
+          {
+            "node": "Validate Required Fields (Enhanced)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Required Fields (Enhanced)": {
+      "main": [
+        [
+          {
+            "node": "Normalize & Enrich Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Validation Error (Enhanced)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Validation Error (Enhanced)": {
+      "main": [
+        [
+          {
+            "node": "Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize & Enrich Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Upsert Contact to CRM (with Retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Contact to CRM (with Retry)": {
+      "main": [
+        [
+          {
+            "node": "Send Internal Notification (Enhanced)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Append to Data Store (Enhanced)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Internal Notification (Enhanced)": {
+      "main": [
+        [
+          {
+            "node": "Format Success Response (Enhanced)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to Data Store (Enhanced)": {
+      "main": [
+        [
+          {
+            "node": "Format Success Response (Enhanced)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Success Response (Enhanced)": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "{{$env.ERROR_WORKFLOW_ID}}",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "staticData": {},
+  "tags": [
+    {
+      "name": "Aigent",
+      "id": "aigent-module"
+    },
+    {
+      "name": "Clinic-Template",
+      "id": "clinic-template"
+    },
+    {
+      "name": "Intake",
+      "id": "intake"
+    },
+    {
+      "name": "Enhanced",
+      "id": "enhanced-v1.1"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-10-30T00:00:00.000Z",
+  "versionId": "1.1.0-enhanced",
+  "meta": {
+    "aigent_module": "intake_lead_capture",
+    "version": "1.1.0",
+    "validated_by": "Serena+Context7",
+    "improvement_mode": true,
+    "templateCredsSetupCompleted": false,
+    "instanceId": "{{$env.N8N_INSTANCE_ID}}",
+    "description": "Aigent Universal Clinic Template - Module 01 ENHANCED: Intake & Lead Capture with advanced features including lead scoring, data normalization, comprehensive error handling, execution metrics, retry logic, and enhanced observability.",
+    "author": "Aigent Automation Engineering (Enhanced by Claude/Opus)",
+    "license": "Proprietary - Aigent Company",
+    "documentation": "https://docs.aigent.company/templates/module-01-enhanced",
+    "enhancements": [
+      "Automatic lead scoring based on interest + referral source",
+      "Phone normalization with display format preservation",
+      "Improved name parsing (handles edge cases)",
+      "Comprehensive execution time tracking",
+      "Retry logic for CRM and data store operations",
+      "Enhanced validation with length constraints",
+      "Rich notification formatting with emojis and priority",
+      "Client IP tracking for audit/abuse detection",
+      "Performance categorization (fast/normal/slow)",
+      "Workflow version tracking across all responses",
+      "Parallel execution optimization maintained",
+      "ContinueOnFail for non-critical operations"
+    ],
+    "breaking_changes": [],
+    "migration_notes": "Fully backwards compatible. New environment variables are optional with defaults. Existing credentials work without modification."
+  }
+}

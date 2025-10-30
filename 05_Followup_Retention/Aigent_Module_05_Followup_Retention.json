@@ -1,0 +1,848 @@
+{
+  "name": "Aigent Module 05 - Follow-Up & Retention",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aigent-followup",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "501",
+      "name": "Webhook - Trigger Follow-Up Sequence",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "{{$env.WEBHOOK_ID_MODULE_05}}"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.body.patient_id}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.patient_email}}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{$json.body.visit_type}}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "502",
+      "name": "Validate Input Schema",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": false, \"error\": \"Missing required fields: patient_id, patient_email, visit_type\", \"trace_id\": \"{{$json.body.trace_id || $now}}\"}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "503",
+      "name": "Return Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [650, 450]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.item.json.body;\nconst traceId = input.trace_id || `FU-${Date.now()}`;\n\nreturn {\n  json: {\n    trace_id: traceId,\n    patient_id: input.patient_id,\n    patient_email: input.patient_email,\n    patient_phone: input.patient_phone || null,\n    patient_name: input.patient_name || 'Valued Patient',\n    visit_type: input.visit_type,\n    visit_date: input.visit_date || new Date().toISOString(),\n    provider_name: input.provider_name || 'Your Provider',\n    clinic_name: $env.CLINIC_NAME || 'Our Clinic',\n    survey_link: null,\n    rebooking_link: $env.REBOOKING_LINK || null,\n    sequence_status: 'initiated',\n    touches_sent: [],\n    nps_score: null,\n    nps_category: null,\n    feedback_text: null\n  }\n};"
+      },
+      "id": "504",
+      "name": "Prepare Follow-Up Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.EMAIL_API_ENDPOINT}}/send",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.EMAIL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.patient_email}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$env.EMAIL_FROM_ADDRESS}}"
+            },
+            {
+              "name": "subject",
+              "value": "Thank you for your visit - {{$json.clinic_name}}"
+            },
+            {
+              "name": "body",
+              "value": "Hi {{$json.patient_name}},\n\nThank you for choosing {{$json.clinic_name}} for your {{$json.visit_type}} visit on {{$formatDate($json.visit_date, 'MMM d, yyyy')}}. We appreciate your trust in our care.\n\nIf you have any questions or concerns, please don't hesitate to reach out to our team.\n\nWarm regards,\n{{$json.provider_name}} and the {{$json.clinic_name}} Team"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "505",
+      "name": "Day-0: Send Thank You Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.SMS_API_ENDPOINT}}/send",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.SMS_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.patient_phone}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$env.SMS_FROM_NUMBER}}"
+            },
+            {
+              "name": "body",
+              "value": "Hi {{$json.patient_name}}, thank you for your visit to {{$json.clinic_name}} today! We appreciate you. - {{$json.provider_name}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "506",
+      "name": "Day-0: Send Thank You SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400],
+      "continueOnFail": true,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "amount": "={{$env.FOLLOWUP_DAY3_DELAY_HOURS || 72}}",
+        "unit": "hours"
+      },
+      "id": "507",
+      "name": "Wait 72 Hours (Day 3)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "webhookId": "{{$env.WAIT_WEBHOOK_DAY3}}"
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.EMAIL_API_ENDPOINT}}/send",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.EMAIL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.patient_email}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$env.EMAIL_FROM_ADDRESS}}"
+            },
+            {
+              "name": "subject",
+              "value": "How are you feeling? - {{$json.clinic_name}}"
+            },
+            {
+              "name": "body",
+              "value": "Hi {{$json.patient_name}},\n\nIt's been a few days since your {{$json.visit_type}} visit with us. We wanted to check in and see how you're feeling.\n\nIf you have any questions about your visit or your care plan, we're here to help. Just reply to this email or give us a call.\n\nTake care,\n{{$json.provider_name}} and the {{$json.clinic_name}} Team"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "508",
+      "name": "Day-3: Send Check-In Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.SMS_API_ENDPOINT}}/send",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.SMS_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.patient_phone}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$env.SMS_FROM_NUMBER}}"
+            },
+            {
+              "name": "body",
+              "value": "Hi {{$json.patient_name}}, checking in from {{$json.clinic_name}}. How are you feeling? Reply or call us if you need anything. - {{$json.provider_name}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "509",
+      "name": "Day-3: Send Check-In SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "amount": "={{$env.FOLLOWUP_DAY7_DELAY_HOURS || 96}}",
+        "unit": "hours"
+      },
+      "id": "510",
+      "name": "Wait 96 Hours (Day 7)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "webhookId": "{{$env.WAIT_WEBHOOK_DAY7}}"
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.EMAIL_API_ENDPOINT}}/send",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.EMAIL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.patient_email}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$env.EMAIL_FROM_ADDRESS}}"
+            },
+            {
+              "name": "subject",
+              "value": "We'd love your feedback - {{$json.clinic_name}}"
+            },
+            {
+              "name": "body",
+              "value": "Hi {{$json.patient_name}},\n\nYour feedback helps us improve our care. Would you take 2 minutes to share your experience?\n\nSurvey Link: {{$env.SURVEY_BASE_URL}}?email={{$json.patient_email}}&patient_id={{$json.patient_id}}&trace_id={{$json.trace_id}}\n\nThank you for helping us serve you better!\n\nBest,\n{{$json.provider_name}} and the {{$json.clinic_name}} Team"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "511",
+      "name": "Day-7: Send Survey Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1650, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.SMS_API_ENDPOINT}}/send",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.SMS_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.patient_phone}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$env.SMS_FROM_NUMBER}}"
+            },
+            {
+              "name": "body",
+              "value": "Hi {{$json.patient_name}}, quick 2-min survey about your visit: {{$env.SURVEY_BASE_URL}}?email={{$json.patient_email}}&patient_id={{$json.patient_id}} - {{$json.clinic_name}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "512",
+      "name": "Day-7: Send Survey SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1650, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "amount": "={{$env.FOLLOWUP_DAY14_DELAY_HOURS || 168}}",
+        "unit": "hours"
+      },
+      "id": "513",
+      "name": "Wait 168 Hours (Day 14)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1850, 300],
+      "webhookId": "{{$env.WAIT_WEBHOOK_DAY14}}"
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.EMAIL_API_ENDPOINT}}/send",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$env.EMAIL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{$json.patient_email}}"
+            },
+            {
+              "name": "from",
+              "value": "={{$env.EMAIL_FROM_ADDRESS}}"
+            },
+            {
+              "name": "subject",
+              "value": "Ready to book your next visit? - {{$json.clinic_name}}"
+            },
+            {
+              "name": "body",
+              "value": "Hi {{$json.patient_name}},\n\nWe hope you're doing well! If you're ready for your next {{$json.visit_type}} visit or need any follow-up care, we'd love to see you again.\n\nBook your next appointment here: {{$json.rebooking_link}}?utm_source=followup&utm_medium=email&utm_campaign=day14_rebook\n\nLooking forward to caring for you again,\n{{$json.provider_name}} and the {{$json.clinic_name}} Team"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "514",
+      "name": "Day-14: Send Rebooking Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2050, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aigent-survey-response",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "515",
+      "name": "Webhook - Survey Response Receiver",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 700],
+      "webhookId": "{{$env.WEBHOOK_ID_SURVEY}}"
+    },
+    {
+      "parameters": {
+        "jsCode": "const surveyProvider = $env.SURVEY_PROVIDER || 'typeform';\nconst response = $input.item.json.body;\n\nlet email, patientId, traceId, nps, feedback, answers;\n\nif (surveyProvider === 'typeform') {\n  email = response.form_response?.hidden?.email || response.email;\n  patientId = response.form_response?.hidden?.patient_id;\n  traceId = response.form_response?.hidden?.trace_id;\n  answers = response.form_response?.answers || [];\n  \n  const npsAnswer = answers.find(a => a.type === 'number' || a.type === 'opinion_scale');\n  nps = npsAnswer?.number || npsAnswer?.opinion_scale || null;\n  \n  const feedbackAnswer = answers.find(a => a.type === 'text' || a.type === 'long_text');\n  feedback = feedbackAnswer?.text || null;\n  \n} else if (surveyProvider === 'google_forms') {\n  const entries = response.entry || {};\n  email = entries['entry.email'] || null;\n  patientId = entries['entry.patient_id'] || null;\n  traceId = entries['entry.trace_id'] || null;\n  nps = parseInt(entries['entry.nps']) || null;\n  feedback = entries['entry.feedback'] || null;\n}\n\nlet npsCategory = null;\nif (nps !== null) {\n  if (nps >= 9) npsCategory = 'promoter';\n  else if (nps >= 7) npsCategory = 'passive';\n  else npsCategory = 'detractor';\n}\n\nreturn {\n  json: {\n    email: email,\n    patient_id: patientId,\n    trace_id: traceId,\n    nps_score: nps,\n    nps_category: npsCategory,\n    feedback_text: feedback,\n    survey_provider: surveyProvider,\n    received_at: new Date().toISOString(),\n    needs_attention: nps !== null && nps < 7\n  }\n};"
+      },
+      "id": "516",
+      "name": "Parse Survey Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 700]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.needs_attention}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "517",
+      "name": "Check If Low NPS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 700]
+    },
+    {
+      "parameters": {
+        "authentication": "generic",
+        "genericAuthType": "httpHeaderAuth",
+        "url": "={{$env.SLACK_WEBHOOK_URL}}",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": ":warning: Low NPS Alert: Patient {{$json.patient_id}} gave NPS score of {{$json.nps_score}} ({{$json.nps_category}}). Feedback: {{$json.feedback_text || 'No feedback provided'}}. Trace ID: {{$json.trace_id}}"
+            },
+            {
+              "name": "channel",
+              "value": "={{$env.SLACK_ALERT_CHANNEL}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "518",
+      "name": "Send Low NPS Alert to Staff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 600],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "contact",
+        "operation": "upsert",
+        "email": "={{$json.email}}",
+        "additionalFields": {
+          "properties": {
+            "property": [
+              {
+                "name": "nps_score",
+                "value": "={{$json.nps_score}}"
+              },
+              {
+                "name": "nps_category",
+                "value": "={{$json.nps_category}}"
+              },
+              {
+                "name": "last_survey_date",
+                "value": "={{$json.received_at}}"
+              },
+              {
+                "name": "followup_sequence_status",
+                "value": "survey_completed"
+              }
+            ]
+          }
+        }
+      },
+      "id": "519",
+      "name": "Update CRM - Survey Response",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2,
+      "position": [850, 800],
+      "credentials": {
+        "hubspotOAuth2Api": {
+          "id": "{{$env.CRM_CREDENTIAL_ID}}",
+          "name": "{{$env.CRM_CREDENTIAL_NAME}}"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "append",
+        "documentId": "={{$env.GSHEET_SURVEY_LOG_ID}}",
+        "sheetName": "={{$env.GSHEET_SURVEY_SHEET_NAME || 'Survey_Responses'}}",
+        "columns": {
+          "mappings": [
+            {
+              "column": "Timestamp",
+              "value": "={{$json.received_at}}"
+            },
+            {
+              "column": "Patient ID",
+              "value": "={{$json.patient_id}}"
+            },
+            {
+              "column": "Email",
+              "value": "={{$json.email}}"
+            },
+            {
+              "column": "NPS Score",
+              "value": "={{$json.nps_score}}"
+            },
+            {
+              "column": "NPS Category",
+              "value": "={{$json.nps_category}}"
+            },
+            {
+              "column": "Feedback",
+              "value": "={{$json.feedback_text}}"
+            },
+            {
+              "column": "Trace ID",
+              "value": "={{$json.trace_id}}"
+            },
+            {
+              "column": "Survey Provider",
+              "value": "={{$json.survey_provider}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "520",
+      "name": "Log Survey to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [1050, 800],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{$env.GSHEET_CREDENTIAL_ID}}",
+          "name": "{{$env.GSHEET_CREDENTIAL_NAME}}"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"trace_id\": \"{{$json.trace_id}}\", \"patient_id\": \"{{$json.patient_id}}\", \"nps_score\": {{$json.nps_score}}, \"nps_category\": \"{{$json.nps_category}}\", \"feedback_received\": {{$json.feedback_text !== null}}, \"timestamp\": \"{{$json.received_at}}\"}",
+        "options": {}
+      },
+      "id": "521",
+      "name": "Return Survey Confirmation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 700]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"trace_id\": \"{{$json.trace_id}}\", \"patient_id\": \"{{$json.patient_id}}\", \"sequence_status\": \"completed\", \"touches_sent\": [\"day0_email\", \"day0_sms\", \"day3_email\", \"day3_sms\", \"day7_survey_email\", \"day7_survey_sms\", \"day14_rebook_email\"], \"message\": \"Follow-up sequence initiated successfully\"}",
+        "options": {}
+      },
+      "id": "522",
+      "name": "Return Follow-Up Confirmation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Trigger Follow-Up Sequence": {
+      "main": [
+        [
+          {
+            "node": "Validate Input Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input Schema": {
+      "main": [
+        [
+          {
+            "node": "Prepare Follow-Up Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Follow-Up Data": {
+      "main": [
+        [
+          {
+            "node": "Day-0: Send Thank You Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Day-0: Send Thank You SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day-0: Send Thank You Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 72 Hours (Day 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day-0: Send Thank You SMS": {
+      "main": [
+        [
+          {
+            "node": "Wait 72 Hours (Day 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 72 Hours (Day 3)": {
+      "main": [
+        [
+          {
+            "node": "Day-3: Send Check-In Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Day-3: Send Check-In SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day-3: Send Check-In Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 96 Hours (Day 7)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day-3: Send Check-In SMS": {
+      "main": [
+        [
+          {
+            "node": "Wait 96 Hours (Day 7)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 96 Hours (Day 7)": {
+      "main": [
+        [
+          {
+            "node": "Day-7: Send Survey Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Day-7: Send Survey SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day-7: Send Survey Email": {
+      "main": [
+        [
+          {
+            "node": "Wait 168 Hours (Day 14)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day-7: Send Survey SMS": {
+      "main": [
+        [
+          {
+            "node": "Wait 168 Hours (Day 14)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 168 Hours (Day 14)": {
+      "main": [
+        [
+          {
+            "node": "Day-14: Send Rebooking Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Day-14: Send Rebooking Email": {
+      "main": [
+        [
+          {
+            "node": "Return Follow-Up Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Survey Response Receiver": {
+      "main": [
+        [
+          {
+            "node": "Parse Survey Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Survey Response": {
+      "main": [
+        [
+          {
+            "node": "Check If Low NPS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update CRM - Survey Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check If Low NPS": {
+      "main": [
+        [
+          {
+            "node": "Send Low NPS Alert to Staff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Send Low NPS Alert to Staff": {
+      "main": [
+        [
+          {
+            "node": "Log Survey to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update CRM - Survey Response": {
+      "main": [
+        [
+          {
+            "node": "Log Survey to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Survey to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Return Survey Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 2,
+  "updatedAt": "2025-01-15T00:00:00.000Z",
+  "versionId": "1.0.0"
+}
