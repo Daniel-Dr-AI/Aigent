@@ -1,0 +1,70 @@
+{
+  "_description": "Valid lead data for happy path testing - Module 01",
+  "_usage": "Use these for TC-HP-001, TC-HP-002, TC-HP-003 tests",
+  "_safety": "All data is completely fictional - safe for testing",
+
+  "complete_lead": {
+    "name": "Alice Anderson",
+    "email": "alice.anderson.test@example.com",
+    "phone": "+15551234001",
+    "source": "website",
+    "message": "I'm interested in scheduling a consultation next week.",
+    "utm_source": "google",
+    "utm_medium": "cpc",
+    "utm_campaign": "spring_2025",
+    "expected_lead_score": "70-80",
+    "notes": "High-quality lead with all fields populated"
+  },
+
+  "minimal_lead": {
+    "name": "Bob Builder",
+    "email": "bob.builder.test@example.com",
+    "phone": "(555) 123-4002",
+    "expected_lead_score": "30-40",
+    "notes": "Only required fields - phone format will be normalized"
+  },
+
+  "phone_formats": [
+    {
+      "name": "Test User 1",
+      "email": "test1@example.com",
+      "phone": "555 123 4567",
+      "format_name": "spaces",
+      "expected_normalized": "+15551234567"
+    },
+    {
+      "name": "Test User 2",
+      "email": "test2@example.com",
+      "phone": "555-123-4567",
+      "format_name": "dashes",
+      "expected_normalized": "+15551234567"
+    },
+    {
+      "name": "Test User 3",
+      "email": "test3@example.com",
+      "phone": "(555) 123-4567",
+      "format_name": "parentheses",
+      "expected_normalized": "+15551234567"
+    },
+    {
+      "name": "Test User 4",
+      "email": "test4@example.com",
+      "phone": "555.123.4567",
+      "format_name": "dots",
+      "expected_normalized": "+15551234567"
+    },
+    {
+      "name": "Test User 5",
+      "email": "test5@example.com",
+      "phone": "+15551234567",
+      "format_name": "already_e164",
+      "expected_normalized": "+15551234567"
+    }
+  ],
+
+  "curl_examples": {
+    "complete_lead_curl": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"Alice Anderson\", \"email\": \"alice.anderson.test@example.com\", \"phone\": \"+15551234001\", \"source\": \"website\", \"message\": \"I'm interested in scheduling a consultation next week.\", \"utm_source\": \"google\", \"utm_medium\": \"cpc\", \"utm_campaign\": \"spring_2025\"}'",
+
+    "minimal_lead_curl": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"Bob Builder\", \"email\": \"bob.builder.test@example.com\", \"phone\": \"(555) 123-4002\"}'"
+  }
+}

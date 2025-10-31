@@ -1,0 +1,93 @@
+{
+  "_description": "Edge case test data for Module 01",
+  "_usage": "Use these for TC-EDGE-001 through TC-EDGE-004 tests",
+  "_note": "These are unusual but VALID scenarios - should all be accepted",
+
+  "very_long_name": {
+    "name": "Maximiliana-Alexandrina-Christophina-Josephina Van Der Hoogenstraaten-Smythe-Worthington III",
+    "email": "very.long.name.test@example.com",
+    "phone": "+15555551001",
+    "test_case": "TC-EDGE-001",
+    "verification": "Full name should be preserved without truncation"
+  },
+
+  "special_characters": {
+    "name": "François O'Reilly-Müller",
+    "email": "francois.oreilly@example.com",
+    "phone": "+15555551003",
+    "test_case": "TC-EDGE-002",
+    "characters_to_verify": ["ç", "'", "ü", "-"],
+    "verification": "All special characters should be preserved"
+  },
+
+  "email_plus_addressing": {
+    "name": "Test User",
+    "email": "test.user+tag123@example.com",
+    "phone": "+15555551006",
+    "test_case": "TC-EDGE-003",
+    "verification": "Plus symbol (+) should be preserved in email"
+  },
+
+  "international_phone": {
+    "name": "Yuki Tanaka",
+    "email": "yuki.tanaka.test@example.com",
+    "phone": "+81312345678",
+    "country": "Japan",
+    "country_code": "+81",
+    "test_case": "TC-EDGE-004",
+    "verification": "Country code should be preserved, phone stored as +81312345678"
+  },
+
+  "additional_edge_cases": [
+    {
+      "scenario": "Hyphenated first name",
+      "name": "Mary-Kate Wilson",
+      "email": "marykate.wilson@example.com",
+      "phone": "+15555551007",
+      "verification": "Hyphen in first name should be preserved"
+    },
+    {
+      "scenario": "Single name (mononym)",
+      "name": "Madonna",
+      "email": "madonna.test@example.com",
+      "phone": "+15555551008",
+      "verification": "Single name should be accepted",
+      "note": "Last name may be empty or same as first name"
+    },
+    {
+      "scenario": "Name with Jr./Sr.",
+      "name": "Robert Smith Jr.",
+      "email": "robert.smith.jr@example.com",
+      "phone": "+15555551009",
+      "verification": "Suffix should be preserved"
+    },
+    {
+      "scenario": "UK phone number",
+      "name": "James Bond",
+      "email": "james.bond@example.com",
+      "phone": "+442071234567",
+      "country": "United Kingdom",
+      "country_code": "+44",
+      "verification": "UK country code preserved"
+    },
+    {
+      "scenario": "Australian phone number",
+      "name": "Crocodile Dundee",
+      "email": "croc.dundee@example.com",
+      "phone": "+61212345678",
+      "country": "Australia",
+      "country_code": "+61",
+      "verification": "Australian country code preserved"
+    }
+  ],
+
+  "curl_examples": {
+    "very_long_name": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"Maximiliana-Alexandrina-Christophina-Josephina Van Der Hoogenstraaten-Smythe-Worthington III\", \"email\": \"very.long.name.test@example.com\", \"phone\": \"+15555551001\"}'",
+
+    "special_characters": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"François O'\\''Reilly-Müller\", \"email\": \"francois.oreilly@example.com\", \"phone\": \"+15555551003\"}'",
+
+    "email_plus": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"Test User\", \"email\": \"test.user+tag123@example.com\", \"phone\": \"+15555551006\"}'",
+
+    "international_phone": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"Yuki Tanaka\", \"email\": \"yuki.tanaka.test@example.com\", \"phone\": \"+81312345678\"}'"
+  }
+}

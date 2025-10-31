@@ -1,0 +1,640 @@
+{
+  "_documentation": {
+    "purpose": "Safe test data for Aigent system testing",
+    "warning": "NEVER use real patient data in testing!",
+    "usage": "Copy and modify these identities for all test scenarios",
+    "compliance": "All data is completely fictional and GDPR/HIPAA-safe"
+  },
+
+  "patients": [
+    {
+      "patient_id": "TEST-P-001",
+      "first_name": "Alice",
+      "last_name": "Anderson",
+      "email": "alice.anderson.test@example.com",
+      "phone": "+15551234001",
+      "phone_formatted": "(555) 123-4001",
+      "date_of_birth": "1985-03-15",
+      "address": {
+        "street": "123 Maple Street",
+        "city": "Springfield",
+        "state": "IL",
+        "zip": "62701",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Blue Cross Blue Shield",
+        "policy_number": "TEST-INS-001234",
+        "group_number": "GRP-9876"
+      },
+      "notes": "Happy path test patient - everything works correctly",
+      "use_for": ["happy_path", "booking", "telehealth", "payment", "follow_up"]
+    },
+    {
+      "patient_id": "TEST-P-002",
+      "first_name": "Bob",
+      "last_name": "Builder",
+      "email": "bob.builder.test@example.com",
+      "phone": "+15551234002",
+      "phone_formatted": "(555) 123-4002",
+      "date_of_birth": "1978-07-22",
+      "address": {
+        "street": "456 Oak Avenue",
+        "city": "Portland",
+        "state": "OR",
+        "zip": "97201",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Aetna",
+        "policy_number": "TEST-INS-002345",
+        "group_number": "GRP-5432"
+      },
+      "notes": "Used for testing SMS and email delivery",
+      "use_for": ["notifications", "sms_delivery", "email_delivery"]
+    },
+    {
+      "patient_id": "TEST-P-003",
+      "first_name": "Carol",
+      "last_name": "Chen",
+      "email": "carol.chen.test@example.com",
+      "phone": "+15551234003",
+      "phone_formatted": "(555) 123-4003",
+      "date_of_birth": "1992-11-08",
+      "address": {
+        "street": "789 Pine Road",
+        "city": "Austin",
+        "state": "TX",
+        "zip": "78701",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "UnitedHealthcare",
+        "policy_number": "TEST-INS-003456",
+        "group_number": "GRP-1357"
+      },
+      "notes": "Used for document upload testing (insurance cards, IDs)",
+      "use_for": ["document_upload", "ocr_testing", "insurance_verification"]
+    },
+    {
+      "patient_id": "TEST-P-004",
+      "first_name": "David",
+      "last_name": "Davis",
+      "email": "david.davis.test@example.com",
+      "phone": "+15551234004",
+      "phone_formatted": "(555) 123-4004",
+      "date_of_birth": "1965-05-30",
+      "address": {
+        "street": "321 Elm Boulevard",
+        "city": "Miami",
+        "state": "FL",
+        "zip": "33101",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Medicare",
+        "policy_number": "TEST-MED-123456A",
+        "group_number": "N/A"
+      },
+      "notes": "Senior patient for Medicare testing scenarios",
+      "use_for": ["medicare_testing", "senior_workflows"]
+    },
+    {
+      "patient_id": "TEST-P-005",
+      "first_name": "Emma",
+      "last_name": "Edwards",
+      "email": "emma.edwards.test@example.com",
+      "phone": "+15551234005",
+      "phone_formatted": "(555) 123-4005",
+      "date_of_birth": "2000-01-01",
+      "address": {
+        "street": "654 Birch Lane",
+        "city": "Seattle",
+        "state": "WA",
+        "zip": "98101",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Cigna",
+        "policy_number": "TEST-INS-005678",
+        "group_number": "GRP-2468"
+      },
+      "notes": "Young adult patient for follow-up engagement testing",
+      "use_for": ["follow_up_testing", "retention", "engagement_tracking"]
+    },
+    {
+      "patient_id": "TEST-P-006",
+      "first_name": "Frank",
+      "last_name": "Foster",
+      "email": "frank.foster.test@example.com",
+      "phone": "+15551234006",
+      "phone_formatted": "(555) 123-4006",
+      "date_of_birth": "1988-09-14",
+      "address": {
+        "street": "987 Cedar Court",
+        "city": "Denver",
+        "state": "CO",
+        "zip": "80201",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Humana",
+        "policy_number": "TEST-INS-006789",
+        "group_number": "GRP-1111"
+      },
+      "notes": "Used for payment failure scenarios",
+      "use_for": ["payment_failures", "retry_logic", "error_handling"]
+    },
+    {
+      "patient_id": "TEST-P-007",
+      "first_name": "Grace",
+      "last_name": "Garcia",
+      "email": "grace.garcia.test@example.com",
+      "phone": "+15551234007",
+      "phone_formatted": "(555) 123-4007",
+      "date_of_birth": "1995-12-25",
+      "address": {
+        "street": "147 Willow Way",
+        "city": "Boston",
+        "state": "MA",
+        "zip": "02101",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Kaiser Permanente",
+        "policy_number": "TEST-INS-007890",
+        "group_number": "GRP-2222"
+      },
+      "notes": "Multi-language testing (English/Spanish)",
+      "use_for": ["multilingual_testing", "spanish_content"]
+    },
+    {
+      "patient_id": "TEST-P-008",
+      "first_name": "Henry",
+      "last_name": "Harris",
+      "email": "henry.harris.test@example.com",
+      "phone": "+15551234008",
+      "phone_formatted": "(555) 123-4008",
+      "date_of_birth": "1970-04-18",
+      "address": {
+        "street": "258 Spruce Street",
+        "city": "Phoenix",
+        "state": "AZ",
+        "zip": "85001",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Anthem",
+        "policy_number": "TEST-INS-008901",
+        "group_number": "GRP-3333"
+      },
+      "notes": "Used for timezone testing (Arizona - no DST)",
+      "use_for": ["timezone_testing", "scheduling_edge_cases"]
+    },
+    {
+      "patient_id": "TEST-P-009",
+      "first_name": "Iris",
+      "last_name": "Ivanov",
+      "email": "iris.ivanov.test@example.com",
+      "phone": "+15551234009",
+      "phone_formatted": "(555) 123-4009",
+      "date_of_birth": "1983-08-07",
+      "address": {
+        "street": "369 Aspen Avenue",
+        "city": "Chicago",
+        "state": "IL",
+        "zip": "60601",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Molina Healthcare",
+        "policy_number": "TEST-INS-009012",
+        "group_number": "GRP-4444"
+      },
+      "notes": "Analytics and reporting test data",
+      "use_for": ["analytics_testing", "dashboard_kpis", "reporting"]
+    },
+    {
+      "patient_id": "TEST-P-010",
+      "first_name": "Jack",
+      "last_name": "Johnson",
+      "email": "jack.johnson.test@example.com",
+      "phone": "+15551234010",
+      "phone_formatted": "(555) 123-4010",
+      "date_of_birth": "1998-02-28",
+      "address": {
+        "street": "741 Poplar Place",
+        "city": "San Francisco",
+        "state": "CA",
+        "zip": "94101",
+        "country": "USA"
+      },
+      "insurance": {
+        "provider": "Health Net",
+        "policy_number": "TEST-INS-010123",
+        "group_number": "GRP-5555"
+      },
+      "notes": "Compliance and audit logging testing",
+      "use_for": ["audit_logging", "compliance_testing", "phi_masking"]
+    }
+  ],
+
+  "leads": [
+    {
+      "lead_id": "TEST-L-001",
+      "first_name": "Laura",
+      "last_name": "Lewis",
+      "email": "laura.lewis.lead@example.com",
+      "phone": "+15552341001",
+      "phone_formatted": "(555) 234-1001",
+      "source": "website",
+      "utm_source": "google",
+      "utm_medium": "cpc",
+      "utm_campaign": "spring_2025",
+      "message": "I'm interested in scheduling a consultation for next week.",
+      "urgency": "normal",
+      "lead_score": 75,
+      "notes": "High-quality lead for intake testing",
+      "use_for": ["intake_testing", "lead_scoring", "crm_integration"]
+    },
+    {
+      "lead_id": "TEST-L-002",
+      "first_name": "Mike",
+      "last_name": "Miller",
+      "email": "mike.miller.lead@example.com",
+      "phone": "+15552341002",
+      "phone_formatted": "(555) 234-1002",
+      "source": "facebook",
+      "utm_source": "facebook",
+      "utm_medium": "social",
+      "utm_campaign": "awareness_2025",
+      "message": "Need info",
+      "urgency": "low",
+      "lead_score": 35,
+      "notes": "Low-quality lead (minimal information)",
+      "use_for": ["low_score_testing", "edge_cases"]
+    },
+    {
+      "lead_id": "TEST-L-003",
+      "first_name": "Nancy",
+      "last_name": "Nelson",
+      "email": "nancy.nelson.lead@example.com",
+      "phone": "+15552341003",
+      "phone_formatted": "(555) 234-1003",
+      "source": "referral",
+      "utm_source": "direct",
+      "utm_medium": "referral",
+      "utm_campaign": "word_of_mouth",
+      "message": "My friend recommended you! I need to see a doctor ASAP for severe pain.",
+      "urgency": "urgent",
+      "lead_score": 95,
+      "notes": "Urgent lead with high intent",
+      "use_for": ["urgent_handling", "priority_routing", "high_intent"]
+    },
+    {
+      "lead_id": "TEST-L-004",
+      "first_name": "Oliver",
+      "last_name": "O'Brien",
+      "email": "oliver.obrien.lead@example.com",
+      "phone": "+15552341004",
+      "phone_formatted": "(555) 234-1004",
+      "source": "instagram",
+      "utm_source": "instagram",
+      "utm_medium": "social",
+      "utm_campaign": "influencer_partnership",
+      "message": "Saw your post! Can you help with telehealth visits?",
+      "urgency": "normal",
+      "lead_score": 60,
+      "notes": "Social media lead interested in telehealth",
+      "use_for": ["social_media_tracking", "telehealth_inquiries"]
+    },
+    {
+      "lead_id": "TEST-L-005",
+      "first_name": "Patricia",
+      "last_name": "Parker",
+      "email": "patricia.parker.lead@example.com",
+      "phone": "+15552341005",
+      "phone_formatted": "(555) 234-1005",
+      "source": "email",
+      "utm_source": "newsletter",
+      "utm_medium": "email",
+      "utm_campaign": "monthly_newsletter_march",
+      "message": "I received your newsletter. I'd like to schedule an annual checkup.",
+      "urgency": "low",
+      "lead_score": 50,
+      "notes": "Newsletter subscriber - existing relationship",
+      "use_for": ["email_campaign_tracking", "returning_leads"]
+    }
+  ],
+
+  "providers": [
+    {
+      "provider_id": "TEST-PROV-001",
+      "first_name": "Dr. Sarah",
+      "last_name": "Smith",
+      "title": "MD",
+      "specialty": "Family Medicine",
+      "email": "dr.sarah.smith.test@example.com",
+      "phone": "+15553331001",
+      "npi": "1234567890",
+      "license_number": "TEST-LIC-001",
+      "license_state": "CA",
+      "zoom_personal_meeting_id": "1234567890",
+      "doxyme_room_url": "https://doxy.me/drsmith",
+      "calendar_id": "dr.sarah.smith.test@example.com",
+      "available_hours": {
+        "monday": ["09:00-12:00", "13:00-17:00"],
+        "tuesday": ["09:00-12:00", "13:00-17:00"],
+        "wednesday": ["09:00-12:00", "13:00-17:00"],
+        "thursday": ["09:00-12:00", "13:00-17:00"],
+        "friday": ["09:00-12:00", "13:00-15:00"]
+      },
+      "notes": "Primary test provider for telehealth",
+      "use_for": ["telehealth_testing", "scheduling", "provider_workflows"]
+    },
+    {
+      "provider_id": "TEST-PROV-002",
+      "first_name": "Dr. Michael",
+      "last_name": "Martinez",
+      "title": "DO",
+      "specialty": "Internal Medicine",
+      "email": "dr.michael.martinez.test@example.com",
+      "phone": "+15553331002",
+      "npi": "0987654321",
+      "license_number": "TEST-LIC-002",
+      "license_state": "NY",
+      "zoom_personal_meeting_id": "0987654321",
+      "doxyme_room_url": "https://doxy.me/drmartinez",
+      "calendar_id": "dr.michael.martinez.test@example.com",
+      "available_hours": {
+        "monday": ["10:00-14:00", "15:00-19:00"],
+        "tuesday": ["10:00-14:00", "15:00-19:00"],
+        "wednesday": ["10:00-14:00"],
+        "thursday": ["10:00-14:00", "15:00-19:00"],
+        "friday": ["10:00-14:00"]
+      },
+      "notes": "Secondary provider for scheduling conflicts",
+      "use_for": ["multi_provider_testing", "availability_edge_cases"]
+    },
+    {
+      "provider_id": "TEST-PROV-003",
+      "first_name": "Dr. Emily",
+      "last_name": "Evans",
+      "title": "NP",
+      "specialty": "Nurse Practitioner",
+      "email": "emily.evans.np.test@example.com",
+      "phone": "+15553331003",
+      "npi": "1122334455",
+      "license_number": "TEST-LIC-003",
+      "license_state": "TX",
+      "zoom_personal_meeting_id": "1122334455",
+      "doxyme_room_url": "https://doxy.me/emilyevansnp",
+      "calendar_id": "emily.evans.np.test@example.com",
+      "available_hours": {
+        "monday": ["08:00-16:00"],
+        "tuesday": ["08:00-16:00"],
+        "wednesday": ["08:00-16:00"],
+        "thursday": ["08:00-16:00"],
+        "friday": ["08:00-12:00"]
+      },
+      "notes": "Nurse practitioner for extended hours testing",
+      "use_for": ["extended_hours", "np_workflows"]
+    }
+  ],
+
+  "staff": [
+    {
+      "staff_id": "TEST-STAFF-001",
+      "first_name": "Rachel",
+      "last_name": "Roberts",
+      "role": "Clinic Manager",
+      "email": "rachel.roberts.mgr@example.com",
+      "phone": "+15554441001",
+      "permissions": ["dashboard_access", "reports", "system_admin"],
+      "notes": "Manager for dashboard and orchestration testing",
+      "use_for": ["manager_dashboard", "system_orchestration", "admin_workflows"]
+    },
+    {
+      "staff_id": "TEST-STAFF-002",
+      "first_name": "Tom",
+      "last_name": "Thompson",
+      "role": "Front Desk",
+      "email": "tom.thompson.desk@example.com",
+      "phone": "+15554441002",
+      "permissions": ["scheduling", "patient_intake"],
+      "notes": "Front desk for intake and booking testing",
+      "use_for": ["intake_workflows", "booking_workflows"]
+    },
+    {
+      "staff_id": "TEST-STAFF-003",
+      "first_name": "Victoria",
+      "last_name": "Valdez",
+      "role": "Billing Specialist",
+      "email": "victoria.valdez.billing@example.com",
+      "phone": "+15554441003",
+      "permissions": ["billing", "payments", "invoicing"],
+      "notes": "Billing for payment processing testing",
+      "use_for": ["billing_workflows", "payment_testing"]
+    },
+    {
+      "staff_id": "TEST-STAFF-004",
+      "first_name": "William",
+      "last_name": "Wilson",
+      "role": "IT Administrator",
+      "email": "william.wilson.it@example.com",
+      "phone": "+15554441004",
+      "permissions": ["full_admin", "system_config", "audit_access"],
+      "notes": "IT admin for compliance and system testing",
+      "use_for": ["compliance_testing", "audit_workflows", "system_config"]
+    }
+  ],
+
+  "test_credit_cards": {
+    "_note": "Use these Stripe test cards for payment testing",
+    "visa_success": {
+      "number": "4242424242424242",
+      "exp_month": "12",
+      "exp_year": "2030",
+      "cvc": "123",
+      "zip": "12345",
+      "expected_result": "success"
+    },
+    "visa_declined": {
+      "number": "4000000000000002",
+      "exp_month": "12",
+      "exp_year": "2030",
+      "cvc": "123",
+      "zip": "12345",
+      "expected_result": "card_declined"
+    },
+    "insufficient_funds": {
+      "number": "4000000000009995",
+      "exp_month": "12",
+      "exp_year": "2030",
+      "cvc": "123",
+      "zip": "12345",
+      "expected_result": "insufficient_funds"
+    },
+    "expired_card": {
+      "number": "4000000000000069",
+      "exp_month": "12",
+      "exp_year": "2030",
+      "cvc": "123",
+      "zip": "12345",
+      "expected_result": "expired_card"
+    },
+    "processing_error": {
+      "number": "4000000000000119",
+      "exp_month": "12",
+      "exp_year": "2030",
+      "cvc": "123",
+      "zip": "12345",
+      "expected_result": "processing_error"
+    },
+    "3d_secure_required": {
+      "number": "4000002500003155",
+      "exp_month": "12",
+      "exp_year": "2030",
+      "cvc": "123",
+      "zip": "12345",
+      "expected_result": "requires_authentication"
+    }
+  },
+
+  "edge_case_data": {
+    "very_long_name": {
+      "first_name": "Maximiliana-Alexandrina-Christophina-Josephina",
+      "last_name": "Van Der Hoogenstraaten-Smythe-Worthington III",
+      "email": "very.long.name.test@example.com",
+      "phone": "+15555551001",
+      "use_for": ["field_length_testing", "ui_overflow_testing"]
+    },
+    "short_name": {
+      "first_name": "Li",
+      "last_name": "Wu",
+      "email": "li.wu.test@example.com",
+      "phone": "+15555551002",
+      "use_for": ["minimum_length_testing"]
+    },
+    "special_characters": {
+      "first_name": "François",
+      "last_name": "O'Reilly-Müller",
+      "email": "francois.oreilly.test@example.com",
+      "phone": "+15555551003",
+      "use_for": ["unicode_testing", "special_char_handling"]
+    },
+    "hyphenated_name": {
+      "first_name": "Mary-Kate",
+      "last_name": "Smith-Johnson",
+      "email": "marykate.smithjohnson.test@example.com",
+      "phone": "+15555551004",
+      "use_for": ["name_parsing_testing"]
+    },
+    "single_name": {
+      "first_name": "Madonna",
+      "last_name": "",
+      "email": "madonna.test@example.com",
+      "phone": "+15555551005",
+      "use_for": ["single_name_edge_case"]
+    },
+    "international_phone": {
+      "first_name": "Yuki",
+      "last_name": "Tanaka",
+      "email": "yuki.tanaka.test@example.com",
+      "phone": "+81312345678",
+      "phone_formatted": "+81 3-1234-5678",
+      "use_for": ["international_phone_testing", "non_us_numbers"]
+    },
+    "email_with_plus": {
+      "first_name": "Test",
+      "last_name": "User",
+      "email": "test.user+tag123@example.com",
+      "phone": "+15555551006",
+      "use_for": ["email_alias_testing", "plus_addressing"]
+    },
+    "future_birth_date": {
+      "first_name": "Baby",
+      "last_name": "NotBornYet",
+      "email": "baby.notbornyet.test@example.com",
+      "phone": "+15555551007",
+      "date_of_birth": "2030-01-01",
+      "use_for": ["date_validation_testing", "negative_age"]
+    },
+    "very_old_birth_date": {
+      "first_name": "Ancient",
+      "last_name": "Elder",
+      "email": "ancient.elder.test@example.com",
+      "phone": "+15555551008",
+      "date_of_birth": "1900-01-01",
+      "use_for": ["extreme_age_testing", "elderly_workflows"]
+    }
+  },
+
+  "invalid_data_examples": {
+    "_note": "Use these to test error handling and validation",
+    "missing_email": {
+      "first_name": "No",
+      "last_name": "Email",
+      "email": "",
+      "phone": "+15556661001"
+    },
+    "invalid_email": {
+      "first_name": "Bad",
+      "last_name": "Email",
+      "email": "not-an-email",
+      "phone": "+15556661002"
+    },
+    "missing_phone": {
+      "first_name": "No",
+      "last_name": "Phone",
+      "email": "no.phone.test@example.com",
+      "phone": ""
+    },
+    "invalid_phone": {
+      "first_name": "Bad",
+      "last_name": "Phone",
+      "email": "bad.phone.test@example.com",
+      "phone": "123"
+    },
+    "missing_all_contact": {
+      "first_name": "No",
+      "last_name": "Contact",
+      "email": "",
+      "phone": ""
+    },
+    "sql_injection_attempt": {
+      "first_name": "'; DROP TABLE patients; --",
+      "last_name": "Hacker",
+      "email": "sqli.test@example.com",
+      "phone": "+15556661003",
+      "use_for": ["security_testing", "sql_injection_prevention"]
+    },
+    "xss_attempt": {
+      "first_name": "<script>alert('XSS')</script>",
+      "last_name": "Tester",
+      "email": "xss.test@example.com",
+      "phone": "+15556661004",
+      "use_for": ["security_testing", "xss_prevention"]
+    }
+  },
+
+  "usage_guide": {
+    "quick_start": "Copy any identity from the 'patients', 'leads', 'providers', or 'staff' arrays for testing",
+    "modification": "Feel free to modify any field values while keeping the structure intact",
+    "safety": "All data is completely fictional. Safe for any testing environment.",
+    "best_practices": [
+      "Always use mock data from this file - never real patient information",
+      "Use the 'use_for' field to select appropriate identities for specific tests",
+      "Reference test IDs (like TEST-P-001) in bug reports for reproducibility",
+      "Create variations by modifying existing identities rather than inventing new ones",
+      "Check 'edge_case_data' for unusual scenarios",
+      "Use 'invalid_data_examples' to test error handling"
+    ],
+    "naming_convention": {
+      "patients": "TEST-P-XXX",
+      "leads": "TEST-L-XXX",
+      "providers": "TEST-PROV-XXX",
+      "staff": "TEST-STAFF-XXX"
+    }
+  }
+}

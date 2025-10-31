@@ -1,0 +1,449 @@
+{
+  "_documentation": {
+    "purpose": "Mock compliance and audit events for testing Module 09",
+    "warning": "All data is fictional - safe for testing environments",
+    "usage": "Use these events to test audit logging, hash chains, and alerting",
+    "hipaa_note": "These events simulate HIPAA-compliant logging without real PHI"
+  },
+
+  "audit_events": [
+    {
+      "event_id": "AUD-001",
+      "timestamp": "2025-10-31T10:15:00Z",
+      "module": "01_intake",
+      "event_type": "lead_created",
+      "severity": "info",
+      "actor_type": "system",
+      "actor_id": "webhook_intake",
+      "resource_type": "lead",
+      "resource_id": "TEST-L-001",
+      "action": "create",
+      "payload": {
+        "first_name": "Alice",
+        "last_name_initial": "A",
+        "email_masked": "a***e@example.com",
+        "source": "website"
+      },
+      "ip_address": "192.168.1.100",
+      "user_agent": "Mozilla/5.0",
+      "expected_alert": false,
+      "description": "Normal lead creation - no alert needed"
+    },
+    {
+      "event_id": "AUD-002",
+      "timestamp": "2025-10-31T10:20:00Z",
+      "module": "02_booking",
+      "event_type": "appointment_created",
+      "severity": "info",
+      "actor_type": "staff",
+      "actor_id": "TEST-STAFF-002",
+      "resource_type": "appointment",
+      "resource_id": "APT-20251115-001",
+      "action": "create",
+      "payload": {
+        "patient_id": "TEST-P-001",
+        "provider_id": "TEST-PROV-001",
+        "appointment_date": "2025-11-15",
+        "appointment_time": "14:00"
+      },
+      "ip_address": "192.168.1.101",
+      "user_agent": "Mozilla/5.0",
+      "expected_alert": false,
+      "description": "Staff member books appointment during business hours"
+    },
+    {
+      "event_id": "AUD-003",
+      "timestamp": "2025-10-31T22:45:00Z",
+      "module": "03_telehealth",
+      "event_type": "phi_accessed",
+      "severity": "warning",
+      "actor_type": "staff",
+      "actor_id": "TEST-STAFF-001",
+      "resource_type": "patient_record",
+      "resource_id": "TEST-P-001",
+      "action": "read",
+      "payload": {
+        "fields_accessed": ["name", "dob", "phone", "email"],
+        "reason": "preparing for tomorrow's appointment"
+      },
+      "ip_address": "192.168.1.150",
+      "user_agent": "Mozilla/5.0",
+      "expected_alert": true,
+      "alert_reason": "after_hours_phi_access",
+      "description": "PHI accessed after business hours (10:45 PM) - should trigger alert"
+    },
+    {
+      "event_id": "AUD-004",
+      "timestamp": "2025-10-31T14:30:00Z",
+      "module": "04_billing",
+      "event_type": "payment_processed",
+      "severity": "info",
+      "actor_type": "system",
+      "actor_id": "stripe_integration",
+      "resource_type": "payment",
+      "resource_id": "PAY-20251031-001",
+      "action": "create",
+      "payload": {
+        "amount": 150.00,
+        "currency": "usd",
+        "patient_id": "TEST-P-001",
+        "card_last4": "4242",
+        "status": "succeeded"
+      },
+      "ip_address": "192.168.1.100",
+      "expected_alert": false,
+      "description": "Successful payment processing"
+    },
+    {
+      "event_id": "AUD-005",
+      "timestamp": "2025-10-31T09:10:00Z",
+      "module": "10_manager",
+      "event_type": "login_failure",
+      "severity": "warning",
+      "actor_type": "user",
+      "actor_id": "unknown",
+      "resource_type": "authentication",
+      "resource_id": "login_attempt_12345",
+      "action": "authenticate",
+      "payload": {
+        "username": "admin",
+        "failure_reason": "invalid_password",
+        "attempt_number": 3
+      },
+      "ip_address": "203.0.113.45",
+      "user_agent": "Mozilla/5.0",
+      "expected_alert": true,
+      "alert_reason": "authentication_failure",
+      "description": "Failed login attempt - 3rd try - should trigger alert"
+    },
+    {
+      "event_id": "AUD-006",
+      "timestamp": "2025-10-31T11:00:00Z",
+      "module": "06_document",
+      "event_type": "document_uploaded",
+      "severity": "info",
+      "actor_type": "patient",
+      "actor_id": "TEST-P-003",
+      "resource_type": "document",
+      "resource_id": "DOC-20251031-001",
+      "action": "create",
+      "payload": {
+        "document_type": "insurance_card",
+        "file_size_bytes": 245760,
+        "file_format": "jpg",
+        "ocr_performed": true
+      },
+      "ip_address": "192.168.1.102",
+      "expected_alert": false,
+      "description": "Patient uploads insurance card for verification"
+    },
+    {
+      "event_id": "AUD-007",
+      "timestamp": "2025-10-31T15:20:00Z",
+      "module": "09_compliance",
+      "event_type": "bulk_export",
+      "severity": "critical",
+      "actor_type": "staff",
+      "actor_id": "TEST-STAFF-004",
+      "resource_type": "patient_records",
+      "resource_id": "bulk_export_12345",
+      "action": "export",
+      "payload": {
+        "record_count": 500,
+        "export_format": "csv",
+        "fields_exported": ["patient_id", "name", "email", "phone", "last_visit"],
+        "export_reason": "quarterly_reporting"
+      },
+      "ip_address": "192.168.1.105",
+      "user_agent": "Mozilla/5.0",
+      "expected_alert": true,
+      "alert_reason": "bulk_operation",
+      "description": "Bulk export of 500 patient records - potential data exfiltration risk"
+    },
+    {
+      "event_id": "AUD-008",
+      "timestamp": "2025-10-31T13:45:00Z",
+      "module": "03_telehealth",
+      "event_type": "video_session_created",
+      "severity": "info",
+      "actor_type": "provider",
+      "actor_id": "TEST-PROV-001",
+      "resource_type": "telehealth_session",
+      "resource_id": "TH-20251031-001",
+      "action": "create",
+      "payload": {
+        "patient_id": "TEST-P-001",
+        "platform": "zoom",
+        "session_duration_minutes": 30,
+        "waiting_room_enabled": true
+      },
+      "ip_address": "192.168.1.110",
+      "expected_alert": false,
+      "description": "Provider creates telehealth session with waiting room enabled"
+    },
+    {
+      "event_id": "AUD-009",
+      "timestamp": "2025-10-31T16:00:00Z",
+      "module": "09_compliance",
+      "event_type": "audit_log_modified",
+      "severity": "critical",
+      "actor_type": "system",
+      "actor_id": "audit_maintenance",
+      "resource_type": "audit_log",
+      "resource_id": "AUD-002",
+      "action": "update",
+      "payload": {
+        "modification_type": "attempted_deletion",
+        "original_hash": "abc123...",
+        "detection": "hash_chain_break",
+        "blocked": true
+      },
+      "ip_address": "192.168.1.200",
+      "expected_alert": true,
+      "alert_reason": "audit_tampering_attempt",
+      "description": "Attempted audit log modification - BLOCKED by hash chain verification"
+    },
+    {
+      "event_id": "AUD-010",
+      "timestamp": "2025-10-31T12:30:00Z",
+      "module": "05_followup",
+      "event_type": "email_sent",
+      "severity": "info",
+      "actor_type": "system",
+      "actor_id": "followup_automation",
+      "resource_type": "communication",
+      "resource_id": "EMAIL-20251031-123",
+      "action": "send",
+      "payload": {
+        "recipient_masked": "a***e@example.com",
+        "template": "day_3_followup",
+        "delivery_status": "delivered"
+      },
+      "ip_address": "192.168.1.100",
+      "expected_alert": false,
+      "description": "Automated follow-up email sent successfully"
+    }
+  ],
+
+  "hash_chain_examples": [
+    {
+      "sequence": 1,
+      "event_id": "AUD-001",
+      "prev_hash": "genesis",
+      "record_hash": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+      "canonical_data": {
+        "audit_id": "AUD-001",
+        "timestamp": "2025-10-31T10:15:00Z",
+        "module": "01_intake",
+        "event": "lead_created",
+        "severity": "info",
+        "actor_type": "system",
+        "actor_id": "webhook_intake",
+        "resource_type": "lead",
+        "resource_id": "TEST-L-001",
+        "payload_hash": "payload_hash_12345",
+        "prev_hash": "genesis"
+      },
+      "verification": "valid",
+      "description": "First audit event - prev_hash is 'genesis'"
+    },
+    {
+      "sequence": 2,
+      "event_id": "AUD-002",
+      "prev_hash": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+      "record_hash": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7",
+      "canonical_data": {
+        "audit_id": "AUD-002",
+        "timestamp": "2025-10-31T10:20:00Z",
+        "module": "02_booking",
+        "event": "appointment_created",
+        "severity": "info",
+        "actor_type": "staff",
+        "actor_id": "TEST-STAFF-002",
+        "resource_type": "appointment",
+        "resource_id": "APT-20251115-001",
+        "payload_hash": "payload_hash_23456",
+        "prev_hash": "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+      },
+      "verification": "valid",
+      "description": "Second event - prev_hash matches first event's record_hash"
+    },
+    {
+      "sequence": 3,
+      "event_id": "AUD-003-TAMPERED",
+      "prev_hash": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7",
+      "record_hash": "INVALID_HASH_MISMATCH",
+      "canonical_data": {
+        "audit_id": "AUD-003",
+        "timestamp": "2025-10-31T10:25:00Z",
+        "module": "03_telehealth",
+        "event": "phi_accessed",
+        "severity": "info",
+        "actor_type": "staff",
+        "actor_id": "TEST-STAFF-001",
+        "resource_type": "patient_record",
+        "resource_id": "TEST-P-001",
+        "payload_hash": "payload_hash_34567",
+        "prev_hash": "b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7"
+      },
+      "verification": "INVALID - hash mismatch",
+      "description": "TAMPERED EVENT - someone changed severity from 'warning' to 'info' after creation",
+      "tampering_detected": {
+        "original_severity": "warning",
+        "modified_severity": "info",
+        "detection_method": "hash_verification_failed",
+        "action_taken": "alert_security_team"
+      }
+    }
+  ],
+
+  "alert_scenarios": [
+    {
+      "scenario_name": "After-Hours PHI Access",
+      "event": {
+        "timestamp": "2025-10-31T23:30:00Z",
+        "module": "06_document",
+        "event_type": "phi_accessed",
+        "severity": "warning",
+        "actor_type": "staff",
+        "actor_id": "TEST-STAFF-003",
+        "resource_type": "patient_record",
+        "resource_id": "TEST-P-005"
+      },
+      "expected_alert": true,
+      "alert_conditions_met": ["after_hours", "phi_related"],
+      "alert_message": "After-hours PHI access detected: TEST-STAFF-003 accessed patient TEST-P-005 at 11:30 PM",
+      "alert_priority": "high"
+    },
+    {
+      "scenario_name": "Multiple Failed Logins",
+      "events": [
+        {"timestamp": "2025-10-31T08:00:00Z", "event_type": "login_failure", "actor_id": "unknown", "ip": "203.0.113.50"},
+        {"timestamp": "2025-10-31T08:01:00Z", "event_type": "login_failure", "actor_id": "unknown", "ip": "203.0.113.50"},
+        {"timestamp": "2025-10-31T08:02:00Z", "event_type": "login_failure", "actor_id": "unknown", "ip": "203.0.113.50"}
+      ],
+      "expected_alert": true,
+      "alert_conditions_met": ["authentication_failure", "multiple_attempts"],
+      "alert_message": "Multiple failed login attempts from IP 203.0.113.50 (3 attempts in 2 minutes)",
+      "alert_priority": "critical"
+    },
+    {
+      "scenario_name": "Bulk Data Export",
+      "event": {
+        "timestamp": "2025-10-31T14:00:00Z",
+        "module": "09_compliance",
+        "event_type": "bulk_export",
+        "severity": "critical",
+        "actor_type": "staff",
+        "actor_id": "TEST-STAFF-001",
+        "resource_count": 1000
+      },
+      "expected_alert": true,
+      "alert_conditions_met": ["bulk_operation", "high_record_count"],
+      "alert_message": "Bulk export of 1000 patient records by TEST-STAFF-001 - potential data exfiltration",
+      "alert_priority": "critical"
+    },
+    {
+      "scenario_name": "High-Severity Event",
+      "event": {
+        "timestamp": "2025-10-31T12:00:00Z",
+        "module": "09_compliance",
+        "event_type": "data_breach",
+        "severity": "critical",
+        "actor_type": "system",
+        "actor_id": "security_monitor",
+        "description": "Unauthorized access detected"
+      },
+      "expected_alert": true,
+      "alert_conditions_met": ["severity_critical"],
+      "alert_message": "CRITICAL: Data breach detected - unauthorized access",
+      "alert_priority": "critical"
+    },
+    {
+      "scenario_name": "Normal Business Activity (No Alert)",
+      "event": {
+        "timestamp": "2025-10-31T10:00:00Z",
+        "module": "02_booking",
+        "event_type": "appointment_created",
+        "severity": "info",
+        "actor_type": "staff",
+        "actor_id": "TEST-STAFF-002"
+      },
+      "expected_alert": false,
+      "alert_conditions_met": [],
+      "description": "Normal business hours activity - no alert needed"
+    }
+  ],
+
+  "phi_masking_examples": [
+    {
+      "field": "email",
+      "original": "alice.anderson@example.com",
+      "masked": "a***n@example.com",
+      "method": "first_last_char_plus_domain"
+    },
+    {
+      "field": "phone",
+      "original": "+15551234567",
+      "masked": "+1555***4567",
+      "method": "show_last_4_digits"
+    },
+    {
+      "field": "ssn",
+      "original": "123-45-6789",
+      "masked": "XXX-XX-6789",
+      "method": "show_last_4_only"
+    },
+    {
+      "field": "credit_card",
+      "original": "4532 1234 5678 9012",
+      "masked": "4532 **** **** 9012",
+      "method": "show_first_4_last_4"
+    },
+    {
+      "field": "ip_address",
+      "original": "192.168.1.100",
+      "masked": "192.168.x.x",
+      "method": "mask_last_two_octets"
+    },
+    {
+      "field": "name",
+      "original": "Alice Marie Anderson",
+      "masked": "Alice A.",
+      "method": "first_name_plus_last_initial"
+    }
+  ],
+
+  "retention_policy_examples": [
+    {
+      "event_date": "2018-10-31",
+      "retention_period_days": 2555,
+      "delete_after_date": "2025-10-30",
+      "status": "eligible_for_deletion",
+      "hipaa_requirement": "7 years (2555 days) from event date"
+    },
+    {
+      "event_date": "2020-01-15",
+      "retention_period_days": 2555,
+      "delete_after_date": "2027-01-14",
+      "status": "retain",
+      "hipaa_requirement": "Must retain until 2027"
+    },
+    {
+      "event_date": "2025-10-31",
+      "retention_period_days": 2555,
+      "delete_after_date": "2032-10-29",
+      "status": "retain",
+      "hipaa_requirement": "Recently created - retain for 7 years"
+    }
+  ],
+
+  "usage_guide": {
+    "testing_audit_creation": "Use events from 'audit_events' array to test log creation",
+    "testing_hash_chain": "Use 'hash_chain_examples' to verify tamper-detection works",
+    "testing_alerts": "Use 'alert_scenarios' to test intelligent alerting conditions",
+    "testing_phi_masking": "Use 'phi_masking_examples' to verify sensitive data is masked correctly",
+    "testing_retention": "Use 'retention_policy_examples' to test automated cleanup",
+    "safety_note": "All data is fictional - safe for any testing environment"
+  }
+}

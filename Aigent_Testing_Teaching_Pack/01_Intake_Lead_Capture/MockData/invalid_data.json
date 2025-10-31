@@ -1,0 +1,75 @@
+{
+  "_description": "Invalid lead data for error handling testing - Module 01",
+  "_usage": "Use these for TC-INV-001 through TC-INV-005 tests",
+  "_expected": "All of these should be REJECTED with clear error messages",
+
+  "missing_email": {
+    "name": "No Email",
+    "phone": "+15556661001",
+    "source": "website",
+    "expected_error": "email is required",
+    "test_case": "TC-INV-001"
+  },
+
+  "invalid_emails": [
+    {
+      "name": "Bad Email 1",
+      "email": "not-an-email",
+      "phone": "+15556661002",
+      "expected_error": "invalid email format",
+      "test_case": "TC-INV-002a",
+      "issue": "no @ symbol"
+    },
+    {
+      "name": "Bad Email 2",
+      "email": "bademail.com",
+      "phone": "+15556661003",
+      "expected_error": "invalid email format",
+      "test_case": "TC-INV-002b",
+      "issue": "missing @ symbol"
+    },
+    {
+      "name": "Bad Email 3",
+      "email": "bad@",
+      "phone": "+15556661004",
+      "expected_error": "invalid email format",
+      "test_case": "TC-INV-002c",
+      "issue": "missing domain"
+    }
+  ],
+
+  "missing_phone": {
+    "name": "No Phone",
+    "email": "no.phone.test@example.com",
+    "source": "website",
+    "expected_error": "phone is required",
+    "test_case": "TC-INV-003"
+  },
+
+  "phone_too_short": {
+    "name": "Short Phone",
+    "email": "short.phone@example.com",
+    "phone": "123",
+    "expected_error": "phone number too short (minimum 7 digits)",
+    "test_case": "TC-INV-004"
+  },
+
+  "missing_name": {
+    "email": "no.name@example.com",
+    "phone": "+15556661005",
+    "expected_error": "name is required",
+    "test_case": "TC-INV-005"
+  },
+
+  "curl_examples": {
+    "missing_email": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"No Email\", \"phone\": \"+15556661001\", \"source\": \"website\"}'",
+
+    "invalid_email": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"Bad Email 1\", \"email\": \"not-an-email\", \"phone\": \"+15556661002\"}'",
+
+    "missing_phone": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"No Phone\", \"email\": \"no.phone.test@example.com\", \"source\": \"website\"}'",
+
+    "phone_too_short": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"name\": \"Short Phone\", \"email\": \"short.phone@example.com\", \"phone\": \"123\"}'",
+
+    "missing_name": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"email\": \"no.name@example.com\", \"phone\": \"+15556661005\"}'"
+  }
+}
