@@ -1,0 +1,11 @@
+Module 01, testing. 
+
+Notes on possible error, changes and updates needed.  
+
+-line 43, cant run Module and get "green toggle", there are current 'errors' are these structural or do we simply need data?
+-If you don't have a CRM you need to disable the node "right click, select disable".
+-Need instructions for collecting all of the variables for each workflow setup.
+-Env instructions, you cannot edit the .env in the cloud hosted N8N, only when self hosting can you upload the whole .env file.  For the browser version you have to input the variables one at a time. 
+-Follow steps on Envinstructions starting line #132 prior to beginning testing of module 01.
+-#223 N8N credential for google sheets, directions not clear.
+-***When using the cloud instance of N8N the Expression is {{Vars.GOOGLE... NOT {{.Env , if self hosting then the variables will come from the {{ENV, !!

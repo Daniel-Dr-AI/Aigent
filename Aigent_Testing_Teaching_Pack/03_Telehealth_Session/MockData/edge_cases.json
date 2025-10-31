@@ -1,0 +1,391 @@
+{
+  "_description": "Edge Case Test Data for Module 03: Telehealth Session",
+  "_usage": "Use these examples to test unusual but valid scenarios. These tests verify the module handles edge cases gracefully.",
+  "_note": "All data is valid but unusual. These tests should return 200 OK unless otherwise noted.",
+  "_purpose": "Edge case testing catches issues that occur in rare but real-world scenarios",
+
+  "test_scenarios": [
+    {
+      "scenario_id": "EDGE-001",
+      "scenario_name": "International Patient - Japan Phone Number",
+      "description": "Test with non-US phone number in E.164 format (Japan)",
+      "_expected": "200 OK, SMS sent to Japanese number (if Twilio supports), phone masked correctly in logs",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_intl_japan_001",
+        "patient_name": "Yuki Tanaka",
+        "patient_email": "yuki.test@example.com",
+        "patient_phone": "+81-90-1234-5678",
+        "scheduled_time": "2025-11-10T14:00:00.000Z",
+        "duration_minutes": 30,
+        "timezone": "Asia/Tokyo",
+        "service_type": "International Consultation",
+        "provider_name": "Dr. Emily Chen"
+      },
+
+      "verification_points": [
+        "Session created successfully",
+        "SMS sent to +81-90-1234-5678 (may fail if Twilio doesn't support Japan)",
+        "Phone masked in Google Sheets: '+81-90-***-5678'",
+        "Timezone Asia/Tokyo handled correctly"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-002",
+      "scenario_name": "International Patient - UK Phone Number",
+      "description": "Test with UK phone number",
+      "_expected": "200 OK, international phone handled correctly",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_intl_uk_001",
+        "patient_name": "Oliver Bennett",
+        "patient_email": "oliver.test@example.com",
+        "patient_phone": "+44-20-7123-4567",
+        "scheduled_time": "2025-11-11T09:00:00.000Z",
+        "timezone": "Europe/London",
+        "provider_name": "Dr. James Wilson"
+      }
+    },
+
+    {
+      "scenario_id": "EDGE-003",
+      "scenario_name": "Special Characters in Name - Accents",
+      "description": "Patient name with accented characters (common in Spanish, French names)",
+      "_expected": "200 OK, name appears correctly in emails (accents preserved)",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_accents_001",
+        "patient_name": "María José García",
+        "patient_email": "maria.test@example.com",
+        "patient_phone": "+15550004567",
+        "scheduled_time": "2025-11-12T15:00:00.000Z"
+      },
+
+      "verification_points": [
+        "Name appears in email with accents: 'María José García'",
+        "No encoding errors (¿, Ã, etc.)",
+        "Name masked correctly in logs: 'M*** J*** G***'"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-004",
+      "scenario_name": "Special Characters in Name - Hyphens and Apostrophes",
+      "description": "Name with hyphens and apostrophes (common in Irish, hyphenated names)",
+      "_expected": "200 OK, hyphens and apostrophes preserved",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_special_chars_001",
+        "patient_name": "María José O'Brien-González",
+        "patient_email": "maria.obrien.test@example.com",
+        "patient_phone": "+15550005678",
+        "scheduled_time": "2025-11-13T10:30:00.000Z"
+      },
+
+      "verification_points": [
+        "Hyphens and apostrophes preserved in notifications",
+        "Name masked: 'M*** J*** O***-G***'",
+        "No parsing errors"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-005",
+      "scenario_name": "Very Short Session - 5 Minutes",
+      "description": "Minimum allowed duration (5 minutes). Common for quick check-ins.",
+      "_expected": "200 OK, 5-minute session created",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_short_session_001",
+        "patient_name": "Robert Taylor",
+        "patient_email": "robert.test@example.com",
+        "scheduled_time": "2025-11-14T11:00:00.000Z",
+        "duration_minutes": 5
+      },
+
+      "verification_points": [
+        "Session created with 5-minute duration",
+        "Email mentions short duration clearly"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-006",
+      "scenario_name": "Very Long Session - 240 Minutes",
+      "description": "Maximum allowed duration (4 hours). Used for intensive therapy or group sessions.",
+      "_expected": "200 OK, 4-hour session created",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_max_duration_001",
+        "patient_name": "Amanda Foster",
+        "patient_email": "amanda.test@example.com",
+        "scheduled_time": "2025-11-15T09:00:00.000Z",
+        "duration_minutes": 240,
+        "service_type": "Group Therapy Session"
+      }
+    },
+
+    {
+      "scenario_id": "EDGE-007",
+      "scenario_name": "Late Night Appointment - 11 PM",
+      "description": "Very late appointment time. Tests timezone handling for edge-of-day times.",
+      "_expected": "200 OK, late night session created with correct date",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_late_night_001",
+        "patient_name": "Jessica Morgan",
+        "patient_email": "jessica.test@example.com",
+        "scheduled_time": "2025-11-16T23:00:00.000Z",
+        "timezone": "America/New_York"
+      },
+
+      "verification_points": [
+        "Email shows 11:00 PM correctly",
+        "Date doesn't roll over to next day incorrectly",
+        "Expiration date calculation correct (next day 11 PM)"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-008",
+      "scenario_name": "No Phone Number - Email Only",
+      "description": "Valid booking without phone number. SMS notification should be skipped gracefully.",
+      "_expected": "200 OK, session created, email sent but no SMS (graceful degradation)",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_no_phone_001",
+        "patient_name": "Daniel Lee",
+        "patient_email": "daniel.test@example.com",
+        "scheduled_time": "2025-11-17T14:00:00.000Z"
+      },
+
+      "verification_points": [
+        "Session created successfully",
+        "Patient email sent",
+        "metadata.patient_sms_sent = false (expected)",
+        "Workflow still succeeds (continueOnFail works)"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-009",
+      "scenario_name": "Email with Plus Addressing",
+      "description": "Email using plus addressing (user+tag@example.com) - valid per RFC 5322",
+      "_expected": "200 OK, email with + character handled correctly",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_plus_email_001",
+        "patient_name": "Rachel Green",
+        "patient_email": "rachel.test+telehealth@example.com",
+        "scheduled_time": "2025-11-18T10:00:00.000Z"
+      },
+
+      "verification_points": [
+        "Email sent successfully to address with +",
+        "No validation error on + character",
+        "Email masked correctly: 'r***l@example.com'"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-010",
+      "scenario_name": "Email with Subdomain",
+      "description": "Email with subdomain (user@subdomain.example.com)",
+      "_expected": "200 OK, subdomain email handled correctly",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_subdomain_email_001",
+        "patient_name": "Steven Carter",
+        "patient_email": "steven.test@clinic.example.com",
+        "scheduled_time": "2025-11-19T13:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "EDGE-011",
+      "scenario_name": "Single Word Name",
+      "description": "Patient with only one name (no space). Common in some cultures.",
+      "_expected": "200 OK, single-word name handled correctly",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_single_name_001",
+        "patient_name": "Madonna",
+        "patient_email": "madonna.test@example.com",
+        "scheduled_time": "2025-11-20T16:00:00.000Z"
+      },
+
+      "verification_points": [
+        "Name appears correctly in notifications",
+        "Name masked: 'M***'",
+        "No parsing errors expecting first/last name split"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-012",
+      "scenario_name": "Three-Part Name",
+      "description": "Patient with three names (first middle last)",
+      "_expected": "200 OK, all three names preserved",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_three_names_001",
+        "patient_name": "John Michael Smith",
+        "patient_email": "john.smith.test@example.com",
+        "scheduled_time": "2025-11-21T11:00:00.000Z"
+      },
+
+      "verification_points": [
+        "Full name in notifications: 'John Michael Smith'",
+        "Name masked: 'J*** M*** S***'"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-013",
+      "scenario_name": "Maximum Length Valid Values",
+      "description": "All fields at maximum allowed length (but still valid)",
+      "_expected": "200 OK, max-length values accepted",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_max_valid_length_appointment_id_that_is_exactly_100_characters_long_in_total_padding_it_now",
+        "patient_name": "Christopher Alexander Montgomery-Wellington-Fitzgerald III",
+        "patient_email": "christopher.alexander.montgomery.wellington.fitzgerald.third@example-clinic-system.com",
+        "scheduled_time": "2025-11-22T14:00:00.000Z",
+        "duration_minutes": 240
+      }
+    },
+
+    {
+      "scenario_id": "EDGE-014",
+      "scenario_name": "Timezone with Daylight Saving",
+      "description": "Appointment during DST transition period (spring forward/fall back)",
+      "_expected": "200 OK, DST handled correctly by Luxon",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_dst_001",
+        "patient_name": "Patricia Davis",
+        "patient_email": "patricia.test@example.com",
+        "scheduled_time": "2025-03-09T02:30:00.000Z",
+        "timezone": "America/New_York"
+      },
+
+      "verification_points": [
+        "Time displayed correctly accounting for DST",
+        "No duplicate hour or missing hour issues"
+      ]
+    },
+
+    {
+      "scenario_id": "EDGE-015",
+      "scenario_name": "Weekend Appointment",
+      "description": "Saturday appointment (verify day-of-week display)",
+      "_expected": "200 OK, 'Saturday' displayed in emails",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_weekend_001",
+        "patient_name": "Brian Wilson",
+        "patient_email": "brian.test@example.com",
+        "scheduled_time": "2025-11-22T10:00:00.000Z",
+        "timezone": "America/New_York"
+      },
+
+      "verification_points": [
+        "Email shows 'Saturday' correctly",
+        "Weekend time accepted (no business hours restriction)"
+      ]
+    }
+  ],
+
+  "curl_examples": {
+    "_instruction": "Replace YOUR-WEBHOOK-URL with your actual webhook URL",
+
+    "edge_001_japan_phone": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_intl_japan_001\", \"patient_name\": \"Yuki Tanaka\", \"patient_email\": \"yuki.test@example.com\", \"patient_phone\": \"+81-90-1234-5678\", \"scheduled_time\": \"2025-11-10T14:00:00.000Z\", \"timezone\": \"Asia/Tokyo\"}'",
+
+    "edge_003_accents": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_accents_001\", \"patient_name\": \"María José García\", \"patient_email\": \"maria.test@example.com\", \"scheduled_time\": \"2025-11-12T15:00:00.000Z\"}'",
+
+    "edge_004_special_chars": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_special_chars_001\", \"patient_name\": \"María José O'Brien-González\", \"patient_email\": \"maria.obrien.test@example.com\", \"scheduled_time\": \"2025-11-13T10:30:00.000Z\"}'",
+
+    "edge_005_min_duration": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_short_session_001\", \"patient_name\": \"Robert Taylor\", \"patient_email\": \"robert.test@example.com\", \"scheduled_time\": \"2025-11-14T11:00:00.000Z\", \"duration_minutes\": 5}'",
+
+    "edge_006_max_duration": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_max_duration_001\", \"patient_name\": \"Amanda Foster\", \"patient_email\": \"amanda.test@example.com\", \"scheduled_time\": \"2025-11-15T09:00:00.000Z\", \"duration_minutes\": 240}'",
+
+    "edge_008_no_phone": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_no_phone_001\", \"patient_name\": \"Daniel Lee\", \"patient_email\": \"daniel.test@example.com\", \"scheduled_time\": \"2025-11-17T14:00:00.000Z\"}'",
+
+    "edge_009_plus_email": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_plus_email_001\", \"patient_name\": \"Rachel Green\", \"patient_email\": \"rachel.test+telehealth@example.com\", \"scheduled_time\": \"2025-11-18T10:00:00.000Z\"}'",
+
+    "edge_011_single_name": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_single_name_001\", \"patient_name\": \"Madonna\", \"patient_email\": \"madonna.test@example.com\", \"scheduled_time\": \"2025-11-20T16:00:00.000Z\"}'"
+  },
+
+  "expected_results": {
+    "_note": "All edge case tests should return 200 OK unless handling reveals a true bug",
+
+    "success_indicators": [
+      "HTTP status 200",
+      "Session created in video platform",
+      "Notifications sent (email always, SMS if phone provided)",
+      "Data handled correctly (no encoding errors, truncation, or parsing issues)",
+      "PHI masked correctly in logs regardless of special characters",
+      "Execution time still < 3000ms"
+    ],
+
+    "acceptable_graceful_failures": {
+      "international_sms": "SMS may fail for non-US numbers if Twilio doesn't support the country. Workflow should still succeed (continueOnFail).",
+      "special_characters": "If email client doesn't render accents, that's client issue, not module issue",
+      "timezone_edge_cases": "DST transitions may show warnings but should still work"
+    }
+  },
+
+  "testing_tips": [
+    "Edge cases test the BOUNDARIES of what's valid",
+    "These tests often reveal bugs that happy path tests miss",
+    "Pay special attention to CHARACTER ENCODING (accents, special chars)",
+    "Verify PHONE MASKING works correctly for international numbers (preserve country code)",
+    "Test TIMEZONE edge cases (DST, late night, crossing midnight)",
+    "Check NAME MASKING for single-word names, hyphenated names, apostrophes",
+    "Verify GRACEFUL DEGRADATION when optional fields are missing",
+    "International phone SMS may fail - that's expected if Twilio doesn't support the country",
+    "All edge cases should still be <3000ms execution time",
+    "Document any edge cases that fail - they may reveal actual bugs vs. expected limitations"
+  ],
+
+  "boundary_value_reference": {
+    "duration_minutes": {
+      "minimum_valid": 5,
+      "maximum_valid": 240,
+      "invalid_below": 4,
+      "invalid_above": 241
+    },
+    "patient_name": {
+      "minimum_valid": 2,
+      "maximum_valid": 100,
+      "invalid_below": 1,
+      "invalid_above": 101
+    },
+    "patient_email": {
+      "minimum_valid": "a@b.c (5 chars)",
+      "maximum_valid": 320,
+      "invalid_above": 321
+    },
+    "appointment_id": {
+      "minimum_valid": 1,
+      "maximum_valid": 100,
+      "invalid_above": 101
+    }
+  }
+}

@@ -1,0 +1,287 @@
+{
+  "_description": "Edge case test data for Module 02 - Unusual but valid scenarios that should be handled gracefully",
+  "_usage": "Use these examples for TC-EDGE-001 through TC-EDGE-004 tests",
+  "_expected": "All requests should succeed (HTTP 200) even though data is unusual",
+
+  "test_cases": [
+    {
+      "test_id": "TC-EDGE-001",
+      "name": "International Phone Number",
+      "description": "Non-US phone numbers with different country codes",
+      "variants": [
+        {
+          "country": "France",
+          "data": {
+            "email": "pierre.dubois@example.com",
+            "name": "Pierre Dubois",
+            "phone": "+33-1-42-86-82-00",
+            "service_type": "Telehealth Consultation",
+            "timezone": "Europe/Paris"
+          },
+          "expected": {
+            "phone_normalized": "+33142868200",
+            "sms_may_fail": true,
+            "email_must_succeed": true,
+            "timezone_conversion_works": true,
+            "_note": "Paris is 6 hours ahead of US Eastern, SMS may not be sent if Twilio doesn't support France"
+          }
+        },
+        {
+          "country": "Japan",
+          "data": {
+            "email": "yuki.tanaka@example.com",
+            "name": "Yuki Tanaka",
+            "phone": "+81-3-1234-5678",
+            "service_type": "Initial Consultation",
+            "timezone": "Asia/Tokyo"
+          },
+          "expected": {
+            "phone_normalized": "+81312345678",
+            "sms_may_fail": true,
+            "timezone_conversion_works": true,
+            "_note": "Tokyo is 13-14 hours ahead of US Eastern"
+          }
+        },
+        {
+          "country": "United Kingdom",
+          "data": {
+            "email": "james.smith@example.com",
+            "name": "James Smith",
+            "phone": "+44-20-7123-4567",
+            "service_type": "Follow-up Visit",
+            "timezone": "Europe/London"
+          },
+          "expected": {
+            "phone_normalized": "+442071234567",
+            "sms_should_work": true,
+            "timezone_conversion_works": true,
+            "_note": "London is 5 hours ahead of US Eastern"
+          }
+        },
+        {
+          "country": "Australia",
+          "data": {
+            "email": "olivia.wilson@example.com",
+            "name": "Olivia Wilson",
+            "phone": "+61-2-9876-5432",
+            "service_type": "Telehealth Consultation",
+            "timezone": "Australia/Sydney"
+          },
+          "expected": {
+            "phone_normalized": "+61298765432",
+            "sms_may_fail": true,
+            "timezone_conversion_works": true,
+            "_note": "Sydney is 14-16 hours ahead of US Eastern (varies with DST)"
+          }
+        }
+      ],
+      "expected_behavior": {
+        "phone_normalized": true,
+        "booking_succeeds": true,
+        "email_always_sent": true,
+        "sms_gracefully_fails_if_unsupported": true,
+        "timezone_handled_correctly": true
+      }
+    },
+
+    {
+      "test_id": "TC-EDGE-002",
+      "name": "Name with Special Characters",
+      "description": "Names with accents, apostrophes, hyphens, and special characters",
+      "variants": [
+        {
+          "type": "Accented characters",
+          "data": {
+            "email": "maria.garcia@example.com",
+            "name": "María García-López",
+            "phone": "+1-555-0198",
+            "service_type": "Initial Consultation",
+            "preferred_date": "2025-11-15",
+            "preferred_time": "10:00"
+          },
+          "expected": {
+            "name_preserved_exactly": "María García-López",
+            "no_character_corruption": true
+          }
+        },
+        {
+          "type": "Apostrophe",
+          "data": {
+            "email": "sean.obrien@example.com",
+            "name": "Seán O'Brien",
+            "phone": "+1-555-0197",
+            "service_type": "Follow-up Visit"
+          },
+          "expected": {
+            "name_preserved_exactly": "Seán O'Brien",
+            "apostrophe_not_stripped": true
+          }
+        },
+        {
+          "type": "Multiple hyphens",
+          "data": {
+            "email": "jean-claude@example.com",
+            "name": "Jean-Claude Müller-Schmidt",
+            "phone": "+1-555-0196",
+            "service_type": "Annual Physical"
+          },
+          "expected": {
+            "name_preserved_exactly": "Jean-Claude Müller-Schmidt",
+            "hyphens_preserved": true
+          }
+        },
+        {
+          "type": "Asian characters",
+          "data": {
+            "email": "wei.zhang@example.com",
+            "name": "张伟 (Zhang Wei)",
+            "phone": "+1-555-0195",
+            "service_type": "Telehealth Consultation"
+          },
+          "expected": {
+            "name_preserved_exactly": "张伟 (Zhang Wei)",
+            "unicode_supported": true
+          }
+        }
+      ],
+      "expected_behavior": {
+        "all_characters_preserved": true,
+        "utf8_encoding_correct": true,
+        "email_displays_correctly": true,
+        "calendar_displays_correctly": true,
+        "sms_may_show_fallback_characters": true
+      }
+    },
+
+    {
+      "test_id": "TC-EDGE-003",
+      "name": "Maximum Length Fields",
+      "description": "Fields at or near maximum allowed length",
+      "data": {
+        "email": "verylongemailaddressfortestingmaximumlengthvalidation@verylongdomainnamefortestingpurposesonly.com",
+        "name": "Extraordinarily Long Name Testing Maximum Character Limit For Patient Name Field Validation System",
+        "phone": "+1234567890123456789",
+        "service_type": "Initial Consultation",
+        "preferred_date": "2025-11-15",
+        "preferred_time": "14:00",
+        "notes": "This is a very long notes field designed to test the maximum length validation. It includes multiple sentences and covers various aspects of patient care requirements. The patient has expressed interest in comprehensive treatment options and would like to discuss preventive care strategies during the consultation. Additionally, the patient mentioned having dietary restrictions and allergies that need to be documented. Follow-up appointments may be necessary depending on the initial consultation outcomes."
+      },
+      "expected_behavior": {
+        "name_max_100_chars": {
+          "limit": 100,
+          "rejection_if_exceeded": true,
+          "error_if_exceeded": "name: maximum 100 characters"
+        },
+        "email_max_320_chars": {
+          "limit": 320,
+          "rejection_if_exceeded": true,
+          "error_if_exceeded": "email: maximum 320 characters"
+        },
+        "phone_max_20_digits": {
+          "limit": 20,
+          "rejection_if_exceeded": true,
+          "error_if_exceeded": "phone: maximum 20 digits"
+        },
+        "notes_max_varies": {
+          "note": "Notes field may have larger limit or be unlimited"
+        }
+      }
+    },
+
+    {
+      "test_id": "TC-EDGE-004",
+      "name": "Same-Day Booking",
+      "description": "Booking an appointment for today (if time is in the future)",
+      "data": {
+        "email": "urgent@example.com",
+        "name": "Urgent Patient",
+        "phone": "+1-555-0196",
+        "service_type": "Urgent Care",
+        "preferred_date": "2025-10-31",
+        "preferred_time": "16:00",
+        "notes": "Urgent appointment needed today"
+      },
+      "expected_behavior": {
+        "succeeds_if_time_in_future": true,
+        "fails_if_time_in_past": true,
+        "may_require_minimum_notice": "Check MIN_BOOKING_NOTICE_HOURS env variable",
+        "marked_as_same_day": true,
+        "may_trigger_urgent_notifications": true
+      },
+      "_note": "Change preferred_date to TODAY'S date and preferred_time to a FUTURE time when testing"
+    }
+  ],
+
+  "curl_examples": {
+    "_note": "Replace YOUR-WEBHOOK-URL with your actual webhook URL and update dates",
+
+    "TC_EDGE_001_international_france": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"pierre.dubois@example.com\",\"name\":\"Pierre Dubois\",\"phone\":\"+33-1-42-86-82-00\",\"service_type\":\"Telehealth Consultation\",\"timezone\":\"Europe/Paris\"}'",
+
+    "TC_EDGE_002_special_chars": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"maria.garcia@example.com\",\"name\":\"María García-López\",\"phone\":\"+1-555-0198\",\"service_type\":\"Initial Consultation\",\"preferred_date\":\"2025-11-15\",\"preferred_time\":\"10:00\"}'",
+
+    "TC_EDGE_003_max_length": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"verylongemailaddressfortestingmaximumlengthvalidation@verylongdomainnamefortestingpurposesonly.com\",\"name\":\"Extraordinarily Long Name Testing Maximum Character Limit For Patient Name Field Validation\",\"phone\":\"+1234567890123456789\",\"service_type\":\"Initial Consultation\",\"preferred_date\":\"2025-11-15\",\"preferred_time\":\"14:00\"}'",
+
+    "TC_EDGE_004_same_day": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"urgent@example.com\",\"name\":\"Urgent Patient\",\"phone\":\"+1-555-0196\",\"service_type\":\"Urgent Care\",\"preferred_date\":\"2025-10-31\",\"preferred_time\":\"16:00\",\"notes\":\"Urgent appointment needed today\"}'"
+  },
+
+  "additional_edge_cases": {
+    "email_edge_cases": {
+      "plus_addressing": {
+        "example": "patient+test@example.com",
+        "should_work": true,
+        "note": "Plus addressing is valid and commonly used for email filtering"
+      },
+      "subdomain": {
+        "example": "patient@clinic.healthcare.example.com",
+        "should_work": true
+      },
+      "country_tld": {
+        "example": "patient@example.co.uk",
+        "should_work": true
+      }
+    },
+
+    "timezone_edge_cases": {
+      "utc": {
+        "timezone": "UTC",
+        "should_work": true,
+        "note": "Universal Coordinated Time"
+      },
+      "half_hour_offset": {
+        "timezone": "Asia/Kolkata",
+        "utc_offset": "+05:30",
+        "should_work": true,
+        "note": "India uses 30-minute offset"
+      },
+      "quarter_hour_offset": {
+        "timezone": "Australia/Eucla",
+        "utc_offset": "+08:45",
+        "should_work": true,
+        "note": "Rare but valid 45-minute offset"
+      }
+    },
+
+    "phone_edge_cases": {
+      "extra_long_international": {
+        "example": "+12345678901234567890",
+        "digits": 20,
+        "should_reject_if_over_max": true
+      },
+      "formatted_with_spaces": {
+        "example": "+1 555 123 4567",
+        "should_normalize_to": "+15551234567",
+        "spaces_should_be_removed": true
+      }
+    }
+  },
+
+  "testing_tips": [
+    "Edge cases should SUCCEED (200) - they're valid, just unusual",
+    "If validation rejects edge case, it's a bug (unless it exceeds max length)",
+    "Test character encoding carefully - Unicode should be preserved",
+    "International phone numbers may not receive SMS (graceful degradation)",
+    "Timezone conversion should work for ALL IANA timezones",
+    "Same-day booking rules depend on MIN_BOOKING_NOTICE_HOURS setting",
+    "Max length tests should REJECT if exceeded, ACCEPT if at or under limit"
+  ]
+}

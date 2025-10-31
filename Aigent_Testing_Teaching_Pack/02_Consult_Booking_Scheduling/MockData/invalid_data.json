@@ -1,0 +1,347 @@
+{
+  "_description": "Invalid test data for Module 02 validation tests - All data is intentionally malformed and should result in 400 errors",
+  "_usage": "Use these examples for TC-INV-001 through TC-INV-007 tests",
+  "_expected": "All requests should return HTTP 400 with specific error messages",
+
+  "test_cases": [
+    {
+      "test_id": "TC-INV-001",
+      "name": "Missing Required Field (Email)",
+      "description": "Email field is completely missing",
+      "data": {
+        "name": "Test Patient",
+        "phone": "+1-555-0199",
+        "service_type": "Consultation"
+      },
+      "expected_error": {
+        "http_status": 400,
+        "error": "Validation failed",
+        "error_code": "VALIDATION_FAILED",
+        "details": ["email: required and must be valid format"]
+      }
+    },
+
+    {
+      "test_id": "TC-INV-002",
+      "name": "Invalid Email Format",
+      "description": "Email does not match email pattern",
+      "variants": [
+        {
+          "name": "No @ symbol",
+          "data": {
+            "email": "not-an-email",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation"
+          }
+        },
+        {
+          "name": "Missing domain",
+          "data": {
+            "email": "test@",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation"
+          }
+        },
+        {
+          "name": "Missing username",
+          "data": {
+            "email": "@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation"
+          }
+        },
+        {
+          "name": "Space in email",
+          "data": {
+            "email": "test @example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation"
+          }
+        }
+      ],
+      "expected_error": {
+        "http_status": 400,
+        "error": "Validation failed",
+        "details": ["email: required and must be valid format"]
+      }
+    },
+
+    {
+      "test_id": "TC-INV-003",
+      "name": "Name Too Short",
+      "description": "Name has less than 2 characters",
+      "data": {
+        "email": "test@example.com",
+        "name": "A",
+        "phone": "+1-555-0199",
+        "service_type": "Consultation"
+      },
+      "expected_error": {
+        "http_status": 400,
+        "error": "Validation failed",
+        "details": ["name: required, minimum 2 characters"]
+      }
+    },
+
+    {
+      "test_id": "TC-INV-004",
+      "name": "Phone Number Too Short",
+      "description": "Phone has less than 7 digits",
+      "variants": [
+        {
+          "name": "Only 3 digits",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "123",
+            "service_type": "Consultation"
+          }
+        },
+        {
+          "name": "6 digits (missing area code)",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "123456",
+            "service_type": "Consultation"
+          }
+        }
+      ],
+      "expected_error": {
+        "http_status": 400,
+        "error": "Validation failed",
+        "details": ["phone: minimum 7 digits"]
+      }
+    },
+
+    {
+      "test_id": "TC-INV-005",
+      "name": "Past Date Rejection",
+      "description": "Appointment date is in the past",
+      "data": {
+        "email": "test@example.com",
+        "name": "Test Patient",
+        "phone": "+1-555-0199",
+        "service_type": "Consultation",
+        "preferred_date": "2020-01-01",
+        "preferred_time": "10:00"
+      },
+      "expected_error": {
+        "http_status": 400,
+        "error": "Validation failed",
+        "details": ["preferred_date: cannot be in the past"]
+      },
+      "_note": "Any date before today should be rejected"
+    },
+
+    {
+      "test_id": "TC-INV-006",
+      "name": "Invalid Date Format",
+      "description": "Date not in ISO 8601 format (YYYY-MM-DD)",
+      "variants": [
+        {
+          "name": "US format (MM/DD/YYYY)",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "11/15/2025",
+            "preferred_time": "10:00"
+          }
+        },
+        {
+          "name": "European format (DD-MM-YYYY)",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "15-11-2025",
+            "preferred_time": "10:00"
+          }
+        },
+        {
+          "name": "Text format",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "Nov 15, 2025",
+            "preferred_time": "10:00"
+          }
+        },
+        {
+          "name": "Slashes instead of dashes",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "2025/11/15",
+            "preferred_time": "10:00"
+          }
+        }
+      ],
+      "expected_error": {
+        "http_status": 400,
+        "error": "Validation failed",
+        "details": ["preferred_date: must be valid ISO 8601 format (YYYY-MM-DD)"]
+      }
+    },
+
+    {
+      "test_id": "TC-INV-007",
+      "name": "Invalid Time Format",
+      "description": "Time not in 24-hour HH:MM format",
+      "variants": [
+        {
+          "name": "12-hour format with AM/PM",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "2025-11-15",
+            "preferred_time": "2:30 PM"
+          }
+        },
+        {
+          "name": "12-hour format with am/pm lowercase",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "2025-11-15",
+            "preferred_time": "2:30pm"
+          }
+        },
+        {
+          "name": "Missing leading zero",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "2025-11-15",
+            "preferred_time": "9:00"
+          }
+        },
+        {
+          "name": "Includes seconds",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "2025-11-15",
+            "preferred_time": "14:30:00"
+          }
+        },
+        {
+          "name": "Invalid hour (> 23)",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "2025-11-15",
+            "preferred_time": "25:00"
+          }
+        },
+        {
+          "name": "Invalid minute (> 59)",
+          "data": {
+            "email": "test@example.com",
+            "name": "Test Patient",
+            "phone": "+1-555-0199",
+            "service_type": "Consultation",
+            "preferred_date": "2025-11-15",
+            "preferred_time": "14:60"
+          }
+        }
+      ],
+      "expected_error": {
+        "http_status": 400,
+        "error": "Validation failed",
+        "details": ["preferred_time: must be valid HH:MM format (e.g., 14:30)"]
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "_note": "Replace YOUR-WEBHOOK-URL with your actual webhook URL",
+
+    "TC_INV_001_missing_email": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"name\":\"Test Patient\",\"phone\":\"+1-555-0199\",\"service_type\":\"Consultation\"}'",
+
+    "TC_INV_002_invalid_email": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"not-an-email\",\"name\":\"Test Patient\",\"phone\":\"+1-555-0199\",\"service_type\":\"Consultation\"}'",
+
+    "TC_INV_003_name_too_short": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"test@example.com\",\"name\":\"A\",\"phone\":\"+1-555-0199\",\"service_type\":\"Consultation\"}'",
+
+    "TC_INV_004_phone_too_short": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"test@example.com\",\"name\":\"Test Patient\",\"phone\":\"123\",\"service_type\":\"Consultation\"}'",
+
+    "TC_INV_005_past_date": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"test@example.com\",\"name\":\"Test Patient\",\"phone\":\"+1-555-0199\",\"service_type\":\"Consultation\",\"preferred_date\":\"2020-01-01\",\"preferred_time\":\"10:00\"}'",
+
+    "TC_INV_006_invalid_date_format": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"test@example.com\",\"name\":\"Test Patient\",\"phone\":\"+1-555-0199\",\"service_type\":\"Consultation\",\"preferred_date\":\"11/15/2025\",\"preferred_time\":\"10:00\"}'",
+
+    "TC_INV_007_invalid_time_format": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"email\":\"test@example.com\",\"name\":\"Test Patient\",\"phone\":\"+1-555-0199\",\"service_type\":\"Consultation\",\"preferred_date\":\"2025-11-15\",\"preferred_time\":\"2:30 PM\"}'"
+  },
+
+  "validation_rules_reference": {
+    "email": {
+      "required": true,
+      "format": "Must match email pattern (something@domain.com)",
+      "examples_valid": ["test@example.com", "user+tag@domain.co.uk"],
+      "examples_invalid": ["not-an-email", "test@", "@example.com", "test @example.com"]
+    },
+    "name": {
+      "required": true,
+      "min_length": 2,
+      "max_length": 100,
+      "examples_valid": ["Jo", "Maria García-López O'Brien"],
+      "examples_invalid": ["A", ""]
+    },
+    "phone": {
+      "required": true,
+      "min_digits": 7,
+      "format": "Country code + number (E.164 preferred)",
+      "examples_valid": ["+1-555-123-4567", "(555) 123-4567", "5551234567"],
+      "examples_invalid": ["123", "555-123"]
+    },
+    "preferred_date": {
+      "required": false,
+      "format": "YYYY-MM-DD (ISO 8601)",
+      "constraint": "Must be today or future date",
+      "examples_valid": ["2025-11-15", "2025-12-31"],
+      "examples_invalid": ["11/15/2025", "2020-01-01", "Nov 15, 2025"]
+    },
+    "preferred_time": {
+      "required": false,
+      "format": "HH:MM (24-hour)",
+      "examples_valid": ["09:00", "14:30", "23:59"],
+      "examples_invalid": ["9:00", "2:30 PM", "14:30:00", "25:00"]
+    },
+    "timezone": {
+      "required": false,
+      "format": "IANA timezone name",
+      "examples_valid": ["America/New_York", "Europe/London"],
+      "examples_invalid": ["EST", "PST", "-05:00"]
+    }
+  },
+
+  "testing_tips": [
+    "All invalid input tests should return HTTP 400",
+    "Error messages should be specific and helpful",
+    "Check the 'details' array for exact validation errors",
+    "Verify no data is saved for invalid requests",
+    "Confirm trace_id is included for debugging",
+    "Test one validation error at a time for clarity",
+    "Record exact error messages for documentation"
+  ]
+}

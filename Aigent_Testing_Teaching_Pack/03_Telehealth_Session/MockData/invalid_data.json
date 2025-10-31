@@ -1,0 +1,258 @@
+{
+  "_description": "Invalid Input Test Data for Module 03: Telehealth Session",
+  "_usage": "Use these examples to test validation error handling. All data is intentionally invalid to verify the module rejects bad requests gracefully.",
+  "_note": "These tests should ALL return 400 Bad Request with field-level error messages. NO session should be created.",
+  "_security_reminder": "Error messages must be PHI-safe (no patient data in error responses)",
+
+  "test_scenarios": [
+    {
+      "scenario_id": "INV-001",
+      "scenario_name": "Missing Required Field - appointment_id",
+      "description": "Request is missing the required appointment_id field",
+      "_expected": "400 Bad Request with error: 'appointment_id: required'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "patient_name": "Test Patient",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-002",
+      "scenario_name": "Invalid Email Format",
+      "description": "Patient email is not a valid email address",
+      "_expected": "400 Bad Request with error: 'patient_email: required and must be valid format'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_invalid_email",
+        "patient_name": "Test Patient",
+        "patient_email": "not-an-email",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-003",
+      "scenario_name": "Invalid Date Format - Non-ISO 8601",
+      "description": "Scheduled time is not in ISO 8601 format (YYYY-MM-DDTHH:mm:ss.sssZ)",
+      "_expected": "400 Bad Request with error: 'scheduled_time: must be valid ISO 8601 format'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_bad_date",
+        "patient_name": "Test Patient",
+        "patient_email": "test@example.com",
+        "scheduled_time": "11/10/2025 2:00 PM"
+      }
+    },
+
+    {
+      "scenario_id": "INV-004",
+      "scenario_name": "Duration Out of Range - Too Long",
+      "description": "Duration exceeds maximum of 240 minutes (prevents abuse)",
+      "_expected": "400 Bad Request with error: 'duration_minutes: must be between 5 and 240'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_long_duration",
+        "patient_name": "Test Patient",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z",
+        "duration_minutes": 500
+      }
+    },
+
+    {
+      "scenario_id": "INV-005",
+      "scenario_name": "Duration Out of Range - Too Short",
+      "description": "Duration is less than minimum of 5 minutes",
+      "_expected": "400 Bad Request with error: 'duration_minutes: must be between 5 and 240'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_short_duration",
+        "patient_name": "Test Patient",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z",
+        "duration_minutes": 2
+      }
+    },
+
+    {
+      "scenario_id": "INV-006",
+      "scenario_name": "Name Too Short",
+      "description": "Patient name is less than 2 characters",
+      "_expected": "400 Bad Request with error: 'patient_name: required, minimum 2 characters'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_short_name",
+        "patient_name": "A",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-007",
+      "scenario_name": "Appointment Not Confirmed",
+      "description": "appointment_confirmed is false (only confirmed appointments should create sessions)",
+      "_expected": "400 Bad Request with error: 'appointment_confirmed: must be true to create session'",
+
+      "test_data": {
+        "appointment_confirmed": false,
+        "appointment_id": "test_not_confirmed",
+        "patient_name": "Test Patient",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-008",
+      "scenario_name": "Email Too Long",
+      "description": "Email exceeds maximum length of 320 characters",
+      "_expected": "400 Bad Request with error: 'patient_email: maximum 320 characters'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_long_email",
+        "patient_name": "Test Patient",
+        "patient_email": "a_very_long_email_address_that_exceeds_the_maximum_allowed_length_for_email_addresses_according_to_rfc_standards_and_this_is_definitely_way_too_long_to_be_a_valid_email_address_in_any_practical_system_so_it_should_be_rejected_by_validation_because_it_is_simply_too_long_and_unreasonable@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-009",
+      "scenario_name": "Name Too Long",
+      "description": "Patient name exceeds maximum length of 100 characters",
+      "_expected": "400 Bad Request with error: 'patient_name: maximum 100 characters'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_long_name",
+        "patient_name": "ThisIsAnExtremelyLongPatientNameThatDefinitelyExceedsOneHundredCharactersAndShouldBeRejectedByTheValidationLogicBecauseItIsTooLong",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-010",
+      "scenario_name": "appointment_id Too Long",
+      "description": "appointment_id exceeds maximum length of 100 characters",
+      "_expected": "400 Bad Request with error: 'appointment_id: maximum 100 characters'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "this_is_an_extremely_long_appointment_id_that_exceeds_100_characters_and_should_be_rejected_by_validation_logic_definitely_too_long",
+        "patient_name": "Test Patient",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-011",
+      "scenario_name": "Empty String for Required Field",
+      "description": "Patient name is an empty string (not just missing, but explicitly empty)",
+      "_expected": "400 Bad Request with error: 'patient_name: required, minimum 2 characters'",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_empty_name",
+        "patient_name": "",
+        "patient_email": "test@example.com",
+        "scheduled_time": "2025-11-10T14:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "INV-012",
+      "scenario_name": "Multiple Validation Errors",
+      "description": "Multiple fields are invalid at once. Should return all errors.",
+      "_expected": "400 Bad Request with error array containing multiple field errors",
+
+      "test_data": {
+        "appointment_confirmed": false,
+        "patient_name": "A",
+        "patient_email": "not-an-email",
+        "scheduled_time": "not-a-date",
+        "duration_minutes": 500
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "_instruction": "Replace YOUR-WEBHOOK-URL with your actual webhook URL. These should ALL return 400 errors.",
+
+    "inv_001_missing_id": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"patient_name\": \"Test Patient\", \"patient_email\": \"test@example.com\", \"scheduled_time\": \"2025-11-10T14:00:00.000Z\"}'",
+
+    "inv_002_invalid_email": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_invalid_email\", \"patient_name\": \"Test Patient\", \"patient_email\": \"not-an-email\", \"scheduled_time\": \"2025-11-10T14:00:00.000Z\"}'",
+
+    "inv_003_invalid_date": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_bad_date\", \"patient_name\": \"Test Patient\", \"patient_email\": \"test@example.com\", \"scheduled_time\": \"11/10/2025 2:00 PM\"}'",
+
+    "inv_004_duration_too_long": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_long_duration\", \"patient_name\": \"Test Patient\", \"patient_email\": \"test@example.com\", \"scheduled_time\": \"2025-11-10T14:00:00.000Z\", \"duration_minutes\": 500}'",
+
+    "inv_006_name_too_short": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_short_name\", \"patient_name\": \"A\", \"patient_email\": \"test@example.com\", \"scheduled_time\": \"2025-11-10T14:00:00.000Z\"}'",
+
+    "inv_007_not_confirmed": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": false, \"appointment_id\": \"test_not_confirmed\", \"patient_name\": \"Test Patient\", \"patient_email\": \"test@example.com\", \"scheduled_time\": \"2025-11-10T14:00:00.000Z\"}'",
+
+    "inv_012_multiple_errors": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": false, \"patient_name\": \"A\", \"patient_email\": \"not-an-email\", \"scheduled_time\": \"not-a-date\", \"duration_minutes\": 500}'"
+  },
+
+  "expected_error_response_format": {
+    "_note": "All invalid input tests should return this structure with 400 status",
+
+    "http_status": 400,
+    "response_body": {
+      "success": false,
+      "error": "Validation failed",
+      "error_code": "VALIDATION_FAILED",
+      "details": [
+        "appointment_id: required",
+        "patient_email: required and must be valid format",
+        "patient_name: required, minimum 2 characters"
+      ],
+      "timestamp": "2025-10-31T14:30:00.000Z",
+      "trace_id": "SESSION-1730217600000",
+      "support_email": "support@yourclinic.com"
+    }
+  },
+
+  "security_verification": {
+    "_critical": "VERIFY these security requirements for ALL error responses",
+
+    "requirements": [
+      "HTTP status must be 400 (not 200 or 500)",
+      "Response must include 'success': false",
+      "Response must include 'error_code': 'VALIDATION_FAILED'",
+      "Error messages must be PHI-safe (no patient data exposed)",
+      "No session should be created in Zoom/Doxy dashboard",
+      "No SMS or email notifications sent",
+      "No CRM updates performed",
+      "No Google Sheets log entry created"
+    ],
+
+    "phi_safety_examples": {
+      "good_error": "patient_email: required and must be valid format",
+      "bad_error": "jane.doe@example.com: invalid email format",
+      "_rule": "Error messages should reference FIELD NAMES, not actual values"
+    }
+  },
+
+  "testing_tips": [
+    "ALL these tests should return HTTP 400 (Bad Request), not 200 or 500",
+    "Check that error messages are clear and actionable",
+    "Verify NO session is created in video platform dashboard",
+    "Verify NO notifications are sent (check Twilio/SendGrid logs)",
+    "Error messages should NEVER contain PHI (patient names, emails, etc.)",
+    "Test INV-012 (multiple errors) verifies all validation runs, not just first error",
+    "After each test, verify workflow status in n8n is 'Error' (red), not 'Success' (green)",
+    "These tests verify data quality protection - bad data should never reach video platforms"
+  ]
+}

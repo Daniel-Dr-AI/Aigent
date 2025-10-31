@@ -1,0 +1,268 @@
+{
+  "_description": "Edge case test data for Module 05: Follow-Up & Retention",
+  "_usage": "Use these examples to test unusual but valid scenarios. All should succeed (HTTP 200) but with special handling.",
+  "_note": "These test boundary conditions, international data, and special characters",
+
+  "test_cases": [
+    {
+      "_test_id": "EDGE-001",
+      "_test_name": "International characters in patient name",
+      "_expected": "HTTP 200, email shows name with accents intact",
+      "payload": {
+        "patient_id": "edge_001",
+        "patient_email": "international@example.com",
+        "patient_name": "José García-Pérez",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "EDGE-002",
+      "_test_name": "Very long visit type (200 characters)",
+      "_expected": "HTTP 200, email shows full visit type, no truncation",
+      "payload": {
+        "patient_id": "edge_002",
+        "patient_email": "longvisit@example.com",
+        "visit_type": "Comprehensive Annual Physical Exam with Full Blood Panel, Cardiovascular Screening, Cancer Screening, Mental Health Assessment, Nutritional Counseling, and Preventive Care Planning"
+      }
+    },
+    {
+      "_test_id": "EDGE-003a",
+      "_test_name": "Phone format: US standard with parentheses",
+      "_expected": "HTTP 200, phone normalized to E.164: 15551234567",
+      "payload": {
+        "patient_id": "edge_003a",
+        "patient_email": "phone_format_a@example.com",
+        "patient_phone": "(555) 123-4567",
+        "visit_type": "Phone Format Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-003b",
+      "_test_name": "Phone format: E.164 (already normalized)",
+      "_expected": "HTTP 200, phone stays: 15551234567",
+      "payload": {
+        "patient_id": "edge_003b",
+        "patient_email": "phone_format_b@example.com",
+        "patient_phone": "+15551234567",
+        "visit_type": "Phone Format Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-003c",
+      "_test_name": "Phone format: Digits only (no country code)",
+      "_expected": "HTTP 200, phone normalized to: 15551234567 (US assumed)",
+      "payload": {
+        "patient_id": "edge_003c",
+        "patient_email": "phone_format_c@example.com",
+        "patient_phone": "5551234567",
+        "visit_type": "Phone Format Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-003d",
+      "_test_name": "Phone format: International (UK)",
+      "_expected": "HTTP 200, phone normalized to: 442079460958",
+      "payload": {
+        "patient_id": "edge_003d",
+        "patient_email": "phone_format_d@example.com",
+        "patient_phone": "+44 20 7946 0958",
+        "visit_type": "Phone Format Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-004",
+      "_test_name": "Empty strings for optional fields (vs null)",
+      "_expected": "HTTP 200, defaults applied (Valued Patient, Your Provider)",
+      "payload": {
+        "patient_id": "edge_004",
+        "patient_email": "empty@example.com",
+        "patient_name": "",
+        "patient_phone": "",
+        "provider_name": "",
+        "visit_type": "Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-005",
+      "_test_name": "Email with plus sign (common for testing)",
+      "_expected": "HTTP 200, survey link properly encodes + as %2B",
+      "payload": {
+        "patient_id": "edge_005",
+        "patient_email": "test+edge@example.com",
+        "visit_type": "Edge Case Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-006",
+      "_test_name": "Patient name with apostrophe",
+      "_expected": "HTTP 200, email shows O'Brien correctly",
+      "payload": {
+        "patient_id": "edge_006",
+        "patient_email": "obrien@example.com",
+        "patient_name": "Patrick O'Brien",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "EDGE-007",
+      "_test_name": "Visit type with special characters",
+      "_expected": "HTTP 200, email shows visit type correctly",
+      "payload": {
+        "patient_id": "edge_007",
+        "patient_email": "special@example.com",
+        "visit_type": "Pre-Op Consultation & Health Assessment (Required)",
+        "patient_name": "Special Char Tester"
+      }
+    },
+    {
+      "_test_id": "EDGE-008",
+      "_test_name": "Maximum valid phone length (20 digits)",
+      "_expected": "HTTP 200, SMS sent successfully",
+      "payload": {
+        "patient_id": "edge_008",
+        "patient_email": "max_phone@example.com",
+        "patient_phone": "+12345678901234567890",
+        "visit_type": "Phone Length Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-009",
+      "_test_name": "Minimum valid phone length (7 digits)",
+      "_expected": "HTTP 200, SMS sent successfully",
+      "payload": {
+        "patient_id": "edge_009",
+        "patient_email": "min_phone@example.com",
+        "patient_phone": "5551234",
+        "visit_type": "Phone Length Test"
+      }
+    },
+    {
+      "_test_id": "EDGE-010",
+      "_test_name": "Patient name with hyphen and multiple parts",
+      "_expected": "HTTP 200, email shows full hyphenated name",
+      "payload": {
+        "patient_id": "edge_010",
+        "patient_email": "hyphen@example.com",
+        "patient_name": "Mary-Jane Parker-Smith",
+        "visit_type": "Consultation"
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "edge_001_international": {
+      "description": "Test international characters in name",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_001\",\"patient_email\":\"international@example.com\",\"patient_name\":\"José García-Pérez\",\"visit_type\":\"Consultation\"}'"
+    },
+    "edge_002_long_visit": {
+      "description": "Test very long visit type (200 chars)",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_002\",\"patient_email\":\"longvisit@example.com\",\"visit_type\":\"Comprehensive Annual Physical Exam with Full Blood Panel, Cardiovascular Screening, Cancer Screening, Mental Health Assessment, Nutritional Counseling, and Preventive Care Planning\"}'"
+    },
+    "edge_003a_phone_us": {
+      "description": "Test US phone format: (555) 123-4567",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_003a\",\"patient_email\":\"phone_format_a@example.com\",\"patient_phone\":\"(555) 123-4567\",\"visit_type\":\"Phone Format Test\"}'"
+    },
+    "edge_003b_phone_e164": {
+      "description": "Test E.164 phone format: +15551234567",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_003b\",\"patient_email\":\"phone_format_b@example.com\",\"patient_phone\":\"+15551234567\",\"visit_type\":\"Phone Format Test\"}'"
+    },
+    "edge_003c_phone_digits": {
+      "description": "Test digits-only phone: 5551234567",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_003c\",\"patient_email\":\"phone_format_c@example.com\",\"patient_phone\":\"5551234567\",\"visit_type\":\"Phone Format Test\"}'"
+    },
+    "edge_003d_phone_intl": {
+      "description": "Test international phone (UK): +44 20 7946 0958",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_003d\",\"patient_email\":\"phone_format_d@example.com\",\"patient_phone\":\"+44 20 7946 0958\",\"visit_type\":\"Phone Format Test\"}'"
+    },
+    "edge_004_empty_strings": {
+      "description": "Test empty strings for optional fields",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_004\",\"patient_email\":\"empty@example.com\",\"patient_name\":\"\",\"patient_phone\":\"\",\"provider_name\":\"\",\"visit_type\":\"Test\"}'"
+    },
+    "edge_005_email_plus": {
+      "description": "Test email with + sign",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"edge_005\",\"patient_email\":\"test+edge@example.com\",\"visit_type\":\"Edge Case Test\"}'"
+    }
+  },
+
+  "phone_normalization_reference": {
+    "_description": "Phone normalization examples for testing",
+    "formats": [
+      {
+        "input": "(555) 123-4567",
+        "expected_normalized": "15551234567",
+        "expected_display": "(555) 123-4567",
+        "format_name": "US Standard"
+      },
+      {
+        "input": "+15551234567",
+        "expected_normalized": "15551234567",
+        "expected_display": "+15551234567",
+        "format_name": "E.164"
+      },
+      {
+        "input": "5551234567",
+        "expected_normalized": "15551234567",
+        "expected_display": "5551234567",
+        "format_name": "Digits Only (US assumed)"
+      },
+      {
+        "input": "+44 20 7946 0958",
+        "expected_normalized": "442079460958",
+        "expected_display": "+44 20 7946 0958",
+        "format_name": "International (UK)"
+      },
+      {
+        "input": "555-123-4567",
+        "expected_normalized": "15551234567",
+        "expected_display": "555-123-4567",
+        "format_name": "US Dashed"
+      }
+    ]
+  },
+
+  "verification_checklist": {
+    "http_response": [
+      "Verify HTTP 200 status code",
+      "Verify 'success': true",
+      "Verify special characters preserved correctly"
+    ],
+    "email_content": [
+      "International characters display correctly (José, not Jos�)",
+      "Long visit types not truncated",
+      "Special characters in names preserved (O'Brien, not O Brien)",
+      "Default values applied when empty strings provided"
+    ],
+    "phone_normalization": [
+      "Check n8n execution log for phone_normalized field",
+      "Verify E.164 format (digits only, country code included)",
+      "Verify original format preserved in phone_display field",
+      "Verify SMS sent successfully to normalized number"
+    ],
+    "survey_rebooking_links": [
+      "Special characters URL-encoded (+ becomes %2B, @ becomes %40)",
+      "Links load correctly when pasted in browser",
+      "Parameters correctly passed to survey/booking platform"
+    ]
+  },
+
+  "special_character_reference": {
+    "international_names": [
+      "José García",
+      "François Dubois",
+      "Müller Schmidt",
+      "Søren Kierkegaard",
+      "Chloë O'Brien"
+    ],
+    "email_special_chars": [
+      "test+tag@example.com (+ sign for tagging)",
+      "first.last@example.com (dot in local part)",
+      "name_123@example.com (underscore and numbers)"
+    ],
+    "visit_types_special": [
+      "Pre-Op & Post-Op Care",
+      "Physical (Annual)",
+      "Follow-Up: Cardiology",
+      "Consultation - New Patient"
+    ]
+  }
+}

@@ -1,0 +1,211 @@
+{
+  "_description": "Invalid test data for Module 05: Follow-Up & Retention",
+  "_usage": "Use these examples to test validation error handling. All should return HTTP 400 with validation errors.",
+  "_note": "These are intentionally invalid to test error handling",
+
+  "test_cases": [
+    {
+      "_test_id": "INV-001",
+      "_test_name": "Missing required field: patient_email",
+      "_expected": "HTTP 400, error: 'patient_email: required and must be valid email format'",
+      "payload": {
+        "patient_id": "12347",
+        "patient_name": "Test Patient",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "INV-002",
+      "_test_name": "Invalid email format",
+      "_expected": "HTTP 400, error: 'patient_email: required and must be valid email format'",
+      "payload": {
+        "patient_id": "12348",
+        "patient_email": "not-an-email",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "INV-003",
+      "_test_name": "Email too long (>320 characters)",
+      "_expected": "HTTP 400, error: 'patient_email: maximum 320 characters (RFC 5321)'",
+      "payload": {
+        "patient_id": "12349",
+        "patient_email": "this-is-a-very-long-email-address-that-exceeds-the-maximum-allowed-length-of-320-characters-according-to-rfc-5321-specifications-for-email-addresses-and-should-be-rejected-by-the-validation-logic-to-prevent-issues-with-email-delivery-systems-that-cannot-handle-such-long-addresses-properly-test@example.com",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "INV-004",
+      "_test_name": "Missing required field: patient_id",
+      "_expected": "HTTP 400, error: 'patient_id: required for CRM linking'",
+      "payload": {
+        "patient_email": "test@example.com",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "INV-005",
+      "_test_name": "Missing required field: visit_type",
+      "_expected": "HTTP 400, error: 'visit_type: required for message personalization'",
+      "payload": {
+        "patient_id": "12350",
+        "patient_email": "test@example.com"
+      }
+    },
+    {
+      "_test_id": "INV-006",
+      "_test_name": "Phone number too short",
+      "_expected": "HTTP 400, error: 'patient_phone: must be 7-20 digits'",
+      "payload": {
+        "patient_id": "12351",
+        "patient_email": "test@example.com",
+        "patient_phone": "12345",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "INV-007",
+      "_test_name": "Future visit date",
+      "_expected": "HTTP 400, error: 'visit_date: cannot be in the future'",
+      "payload": {
+        "patient_id": "12352",
+        "patient_email": "test@example.com",
+        "visit_type": "Consultation",
+        "visit_date": "2026-12-31T00:00:00Z"
+      }
+    },
+    {
+      "_test_id": "INV-008",
+      "_test_name": "Empty patient_id",
+      "_expected": "HTTP 400, error: 'patient_id: required for CRM linking'",
+      "payload": {
+        "patient_id": "",
+        "patient_email": "test@example.com",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "INV-009",
+      "_test_name": "Phone number too long (>20 digits)",
+      "_expected": "HTTP 400, error: 'patient_phone: must be 7-20 digits'",
+      "payload": {
+        "patient_id": "12353",
+        "patient_email": "test@example.com",
+        "patient_phone": "123456789012345678901",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "INV-010",
+      "_test_name": "Invalid visit_date format",
+      "_expected": "HTTP 400, error: 'visit_date: must be valid ISO 8601 format'",
+      "payload": {
+        "patient_id": "12354",
+        "patient_email": "test@example.com",
+        "visit_type": "Consultation",
+        "visit_date": "not-a-date"
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "inv_001_missing_email": {
+      "description": "Test missing patient_email field",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12347\",\"patient_name\":\"Test Patient\",\"visit_type\":\"Consultation\"}'"
+    },
+    "inv_002_invalid_email": {
+      "description": "Test invalid email format",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12348\",\"patient_email\":\"not-an-email\",\"visit_type\":\"Consultation\"}'"
+    },
+    "inv_003_email_too_long": {
+      "description": "Test email exceeding 320 characters",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12349\",\"patient_email\":\"this-is-a-very-long-email-address-that-exceeds-the-maximum-allowed-length-of-320-characters-according-to-rfc-5321-specifications-for-email-addresses-and-should-be-rejected-by-the-validation-logic-to-prevent-issues-with-email-delivery-systems-that-cannot-handle-such-long-addresses-properly-test@example.com\",\"visit_type\":\"Consultation\"}'"
+    },
+    "inv_004_missing_patient_id": {
+      "description": "Test missing patient_id field",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_email\":\"test@example.com\",\"visit_type\":\"Consultation\"}'"
+    },
+    "inv_005_missing_visit_type": {
+      "description": "Test missing visit_type field",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12350\",\"patient_email\":\"test@example.com\"}'"
+    },
+    "inv_006_phone_too_short": {
+      "description": "Test phone number with <7 digits",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12351\",\"patient_email\":\"test@example.com\",\"patient_phone\":\"12345\",\"visit_type\":\"Consultation\"}'"
+    },
+    "inv_007_future_date": {
+      "description": "Test visit date in the future",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12352\",\"patient_email\":\"test@example.com\",\"visit_type\":\"Consultation\",\"visit_date\":\"2026-12-31T00:00:00Z\"}'"
+    }
+  },
+
+  "expected_error_responses": {
+    "validation_failed_example": {
+      "success": false,
+      "error": {
+        "code": "VALIDATION_FAILED",
+        "message": "Request validation failed",
+        "details": [
+          "patient_email: required and must be valid email format"
+        ],
+        "trace_id": "ERR-1730300800000"
+      },
+      "validated_at": "2025-10-30T14:20:00Z"
+    },
+    "multiple_errors_example": {
+      "success": false,
+      "error": {
+        "code": "VALIDATION_FAILED",
+        "message": "Request validation failed",
+        "details": [
+          "patient_email: required and must be valid email format",
+          "patient_phone: must be 7-20 digits",
+          "visit_date: cannot be in the future"
+        ],
+        "trace_id": "ERR-1730300900000"
+      },
+      "validated_at": "2025-10-30T14:21:00Z"
+    }
+  },
+
+  "verification_checklist": {
+    "http_response": [
+      "Verify HTTP 400 status code",
+      "Verify 'success': false in response",
+      "Verify error code is 'VALIDATION_FAILED'",
+      "Verify error details list specific field errors",
+      "Verify trace_id starts with 'ERR-'",
+      "Verify validated_at timestamp is present"
+    ],
+    "no_side_effects": [
+      "Verify no email sent (check SendGrid Activity)",
+      "Verify no SMS sent (check Twilio Logs)",
+      "Verify n8n execution shows validation error path",
+      "Verify no record created in Google Sheets"
+    ]
+  },
+
+  "common_validation_errors": {
+    "patient_email": [
+      "patient_email: required and must be valid email format",
+      "patient_email: maximum 320 characters (RFC 5321)"
+    ],
+    "patient_id": [
+      "patient_id: required for CRM linking"
+    ],
+    "visit_type": [
+      "visit_type: required for message personalization",
+      "visit_type: maximum 200 characters"
+    ],
+    "patient_phone": [
+      "patient_phone: must be 7-20 digits"
+    ],
+    "visit_date": [
+      "visit_date: must be valid ISO 8601 format",
+      "visit_date: cannot be in the future"
+    ],
+    "patient_name": [
+      "patient_name: must be 2-100 characters if provided"
+    ]
+  }
+}

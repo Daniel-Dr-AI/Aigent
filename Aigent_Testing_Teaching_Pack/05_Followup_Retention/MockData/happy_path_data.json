@@ -1,0 +1,163 @@
+{
+  "_description": "Happy path test data for Module 05: Follow-Up & Retention",
+  "_usage": "Use these examples for testing successful follow-up sequence triggers. All data is completely fictional and safe for testing.",
+  "_note": "Replace YOUR-WEBHOOK-URL with your actual webhook URL from n8n",
+
+  "test_cases": [
+    {
+      "_test_id": "HP-001",
+      "_test_name": "Complete sequence with email and SMS",
+      "_expected": "HTTP 200, touches_sent includes day0_email and day0_sms, both delivered",
+      "payload": {
+        "patient_id": "12345",
+        "patient_email": "jane.doe@example.com",
+        "patient_phone": "+1-555-123-4567",
+        "patient_name": "Jane Doe",
+        "visit_type": "General Consultation",
+        "visit_date": "2025-10-30T14:00:00Z",
+        "provider_name": "Dr. Smith"
+      }
+    },
+    {
+      "_test_id": "HP-002",
+      "_test_name": "Email-only sequence (no phone number)",
+      "_expected": "HTTP 200, touches_sent includes only day0_email, SMS gracefully skipped",
+      "payload": {
+        "patient_id": "12346",
+        "patient_email": "john.smith@example.com",
+        "patient_name": "John Smith",
+        "visit_type": "Follow-up Appointment"
+      }
+    },
+    {
+      "_test_id": "HP-003",
+      "_test_name": "Minimal required fields (defaults applied)",
+      "_expected": "HTTP 200, email shows 'Valued Patient' and 'Your Provider' defaults",
+      "payload": {
+        "patient_id": "minimal_001",
+        "patient_email": "minimal@example.com",
+        "visit_type": "Consultation"
+      }
+    },
+    {
+      "_test_id": "HP-004",
+      "_test_name": "Survey link generation with special characters",
+      "_expected": "HTTP 200, survey_link properly URL-encodes special characters",
+      "payload": {
+        "patient_id": "survey_test_001",
+        "patient_email": "survey.test+special@example.com",
+        "visit_type": "Test Visit",
+        "patient_name": "Survey Tester"
+      }
+    },
+    {
+      "_test_id": "HP-005",
+      "_test_name": "Rebooking link with UTM tracking",
+      "_expected": "HTTP 200, rebooking_link includes all UTM parameters",
+      "payload": {
+        "patient_id": "rebook_test_001",
+        "patient_email": "rebook@example.com",
+        "visit_type": "General Consultation",
+        "patient_name": "Rebooking Tester"
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "hp_001_complete_sequence": {
+      "description": "Test complete follow-up sequence with email and SMS",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12345\",\"patient_email\":\"jane.doe@example.com\",\"patient_phone\":\"+1-555-123-4567\",\"patient_name\":\"Jane Doe\",\"visit_type\":\"General Consultation\",\"visit_date\":\"2025-10-30T14:00:00Z\",\"provider_name\":\"Dr. Smith\"}'"
+    },
+    "hp_002_email_only": {
+      "description": "Test email-only sequence (no phone number provided)",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"12346\",\"patient_email\":\"john.smith@example.com\",\"patient_name\":\"John Smith\",\"visit_type\":\"Follow-up Appointment\"}'"
+    },
+    "hp_003_minimal_fields": {
+      "description": "Test with minimal required fields only",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"minimal_001\",\"patient_email\":\"minimal@example.com\",\"visit_type\":\"Consultation\"}'"
+    },
+    "hp_004_survey_link": {
+      "description": "Test survey link generation with special characters",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"survey_test_001\",\"patient_email\":\"survey.test+special@example.com\",\"visit_type\":\"Test Visit\",\"patient_name\":\"Survey Tester\"}'"
+    },
+    "hp_005_utm_tracking": {
+      "description": "Test rebooking link with UTM parameters",
+      "command": "curl -X POST YOUR-WEBHOOK-URL -H 'Content-Type: application/json' -d '{\"patient_id\":\"rebook_test_001\",\"patient_email\":\"rebook@example.com\",\"visit_type\":\"General Consultation\",\"patient_name\":\"Rebooking Tester\"}'"
+    }
+  },
+
+  "expected_responses": {
+    "hp_001_success": {
+      "success": true,
+      "trace_id": "FU-1730300400000",
+      "patient_id": "12345",
+      "sequence_status": "initiated",
+      "touches_sent": ["day0_email", "day0_sms"],
+      "touch_results": [
+        {
+          "touch": "day0_email",
+          "status": "sent",
+          "sent_at": "2025-10-30T14:00:00Z"
+        },
+        {
+          "touch": "day0_sms",
+          "status": "sent",
+          "sent_at": "2025-10-30T14:00:05Z",
+          "sms_sid": "SM123abc456def789ghi"
+        }
+      ],
+      "survey_link": "https://example.com/survey?email=jane.doe%40example.com&patient_id=12345&trace_id=FU-1730300400000",
+      "rebooking_link": "https://example.com/book?patient_id=12345&utm_source=followup&utm_medium=email&utm_campaign=day14_rebook&trace_id=FU-1730300400000",
+      "execution_time_ms": 1200,
+      "performance_category": "normal"
+    },
+    "hp_002_email_only": {
+      "success": true,
+      "trace_id": "FU-1730300500000",
+      "patient_id": "12346",
+      "sequence_status": "initiated",
+      "touches_sent": ["day0_email"],
+      "touch_results": [
+        {
+          "touch": "day0_email",
+          "status": "sent",
+          "sent_at": "2025-10-30T14:05:00Z"
+        }
+      ]
+    }
+  },
+
+  "verification_checklist": {
+    "http_response": [
+      "Verify HTTP 200 status code",
+      "Verify 'success': true in response",
+      "Copy trace_id for tracking",
+      "Verify touches_sent lists expected touches",
+      "Verify touch_results show 'status': 'sent'",
+      "Verify survey_link includes all parameters",
+      "Verify rebooking_link includes UTM parameters",
+      "Verify execution_time_ms < 3000"
+    ],
+    "sendgrid_activity": [
+      "Email appears within 5 seconds",
+      "Status is 'Delivered' within 30 seconds",
+      "Subject line is correct",
+      "Recipient email matches test data",
+      "No bounce or spam report"
+    ],
+    "twilio_logs": [
+      "SMS appears within 10 seconds (if phone provided)",
+      "Status is 'Delivered' within 60 seconds",
+      "To number is E.164 format (+15551234567)",
+      "Message content is personalized",
+      "No error codes"
+    ],
+    "n8n_execution": [
+      "Execution status is 'Success'",
+      "All nodes executed successfully",
+      "Validation passed",
+      "Links generated correctly",
+      "No unexpected errors"
+    ]
+  }
+}

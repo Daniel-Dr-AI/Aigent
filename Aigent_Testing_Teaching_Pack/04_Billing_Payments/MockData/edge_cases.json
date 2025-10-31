@@ -1,0 +1,305 @@
+{
+  "_description": "Edge case test data for Module 04: Billing & Payments",
+  "_usage": "Use these unusual but valid scenarios to test fraud detection, idempotency, and special cases",
+  "_note": "These tests verify the system handles unusual situations correctly",
+
+  "test_cases": [
+    {
+      "test_id": "EDGE-001",
+      "test_name": "Disposable Email Domain Detection",
+      "_expected": "Fraud check blocks request, risk_level = CRITICAL",
+      "data": {
+        "patient_email": "test@tempmail.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-200",
+        "amount": "150.00",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-200"
+      },
+      "_note": "tempmail.com is a disposable email service (should be blocked)"
+    },
+    {
+      "test_id": "EDGE-002",
+      "test_name": "Duplicate Invoice Reference (Idempotency Test)",
+      "_expected": "Second request returns duplicate warning, no double charge",
+      "_instructions": "Send the same request twice. First succeeds, second returns duplicate detected",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-201",
+        "amount": "100.00",
+        "service_description": "Test service",
+        "invoice_reference": "INV-DUPLICATE-TEST"
+      },
+      "_note": "Use identical invoice_reference to test idempotency"
+    },
+    {
+      "test_id": "EDGE-003",
+      "test_name": "High-Value Transaction (Manual Review Flag)",
+      "_expected": "Invoice created but flagged for review, risk_level = MEDIUM",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-202",
+        "amount": "7500.00",
+        "currency": "USD",
+        "service_description": "Comprehensive treatment package",
+        "invoice_reference": "INV-HIGH-VALUE-001"
+      },
+      "_note": "$7,500 exceeds high-value threshold ($5,000 default)"
+    },
+    {
+      "test_id": "EDGE-EXTRA-01",
+      "test_name": "International Characters in Name",
+      "_expected": "Successfully processed with proper UTF-8 encoding",
+      "data": {
+        "patient_email": "international.test@example.com",
+        "patient_name": "François Müller-O'Brien",
+        "patient_id": "PT-2025-203",
+        "amount": "175.00",
+        "currency": "EUR",
+        "service_description": "Consultation générale",
+        "invoice_reference": "INV-INTL-001"
+      },
+      "_note": "Tests UTF-8 handling: accents, umlauts, hyphens, apostrophes"
+    },
+    {
+      "test_id": "EDGE-EXTRA-02",
+      "test_name": "Maximum Amount (Boundary Test)",
+      "_expected": "Successfully processed at maximum allowed amount",
+      "data": {
+        "patient_email": "max.amount.test@example.com",
+        "patient_name": "Max Amount Test",
+        "patient_id": "PT-2025-204",
+        "amount": "100000.00",
+        "currency": "USD",
+        "service_description": "Complex surgical procedure - maximum coverage",
+        "invoice_reference": "INV-MAX-AMOUNT-001"
+      },
+      "_note": "$100,000 is exactly at the maximum threshold (should succeed)"
+    },
+    {
+      "test_id": "EDGE-EXTRA-03",
+      "test_name": "Minimum Amount (Boundary Test)",
+      "_expected": "Successfully processed at minimum allowed amount",
+      "data": {
+        "patient_email": "min.amount.test@example.com",
+        "patient_name": "Min Amount Test",
+        "patient_id": "PT-2025-205",
+        "amount": "1.00",
+        "currency": "USD",
+        "service_description": "Minimal service fee",
+        "invoice_reference": "INV-MIN-AMOUNT-001"
+      },
+      "_note": "$1.00 is exactly at the minimum threshold (should succeed)"
+    },
+    {
+      "test_id": "EDGE-EXTRA-04",
+      "test_name": "Non-Default Currency (GBP)",
+      "_expected": "Risk score increased but processed successfully",
+      "data": {
+        "patient_email": "gbp.test@example.com",
+        "patient_name": "Sterling Test User",
+        "patient_id": "PT-2025-206",
+        "amount": "120.00",
+        "currency": "GBP",
+        "service_description": "UK patient consultation",
+        "invoice_reference": "INV-GBP-001"
+      },
+      "_note": "Non-default currency flags warning but should succeed"
+    },
+    {
+      "test_id": "EDGE-EXTRA-05",
+      "test_name": "Very Long Service Description (499 chars)",
+      "_expected": "Successfully processed with full description",
+      "data": {
+        "patient_email": "long.desc.test@example.com",
+        "patient_name": "Long Description Test",
+        "patient_id": "PT-2025-207",
+        "amount": "350.00",
+        "service_description": "Comprehensive health assessment including: complete physical examination, blood work panel (CBC, CMP, lipid panel, HbA1c, thyroid function), urinalysis, EKG, chest X-ray, vision and hearing screening, nutritional counseling, mental health screening, vaccination review and updates, chronic disease management consultation, preventive care recommendations, detailed health history review, and comprehensive treatment plan development with follow-up scheduling and coordination of specialty referrals as needed.",
+        "invoice_reference": "INV-LONG-DESC-001"
+      },
+      "_note": "499 characters - just under 500 limit (should succeed)"
+    },
+    {
+      "test_id": "EDGE-EXTRA-06",
+      "test_name": "Suspicious Amount Pattern (Test Value)",
+      "_expected": "Warning flagged but processed (risk_score increased)",
+      "data": {
+        "patient_email": "suspicious.amount.test@example.com",
+        "patient_name": "Suspicious Amount Test",
+        "patient_id": "PT-2025-208",
+        "amount": "9999.99",
+        "currency": "USD",
+        "service_description": "Treatment package",
+        "invoice_reference": "INV-SUSPICIOUS-AMOUNT-001"
+      },
+      "_note": "$9,999.99 is suspicious pattern (common test value)"
+    }
+  ],
+
+  "curl_examples": {
+    "disposable_email": {
+      "description": "Test fraud detection blocks disposable email domains",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"test@tempmail.com\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-200\",\n    \"amount\": \"150.00\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-TEST-200\"\n  }'",
+      "expected_response": {
+        "status": "error",
+        "message": "Fraud check failed",
+        "reason": "Disposable email domain detected",
+        "risk_score": 50,
+        "risk_level": "CRITICAL"
+      }
+    },
+    "duplicate_invoice_step1": {
+      "description": "Step 1: Send initial request (should succeed)",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"test@example.com\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-201\",\n    \"amount\": \"100.00\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-DUPLICATE-TEST\"\n  }'",
+      "expected_response": {
+        "status": "success",
+        "message": "Invoice created and sent successfully"
+      }
+    },
+    "duplicate_invoice_step2": {
+      "description": "Step 2: Send identical request again (should detect duplicate)",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"test@example.com\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-201\",\n    \"amount\": \"100.00\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-DUPLICATE-TEST\"\n  }'",
+      "expected_response": {
+        "status": "duplicate",
+        "message": "Invoice already exists",
+        "existing_invoice_id": "in_1ABC...",
+        "invoice_reference": "INV-DUPLICATE-TEST",
+        "note": "No duplicate charge created"
+      }
+    },
+    "high_value_transaction": {
+      "description": "Test high-value transaction flagging",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"test@example.com\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-202\",\n    \"amount\": \"7500.00\",\n    \"service_description\": \"Comprehensive treatment package\",\n    \"invoice_reference\": \"INV-HIGH-VALUE-001\"\n  }'",
+      "expected_response": {
+        "status": "success",
+        "message": "Invoice created (flagged for review)",
+        "review_required": true,
+        "reason": "High-value transaction",
+        "risk_score": 15,
+        "risk_level": "MEDIUM"
+      }
+    },
+    "international_characters": {
+      "description": "Test UTF-8 encoding with international characters",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"international.test@example.com\",\n    \"patient_name\": \"François Müller-O'\"'\"'Brien\",\n    \"patient_id\": \"PT-2025-203\",\n    \"amount\": \"175.00\",\n    \"currency\": \"EUR\",\n    \"service_description\": \"Consultation générale\",\n    \"invoice_reference\": \"INV-INTL-001\"\n  }'",
+      "expected_response": {
+        "status": "success",
+        "message": "Invoice created and sent successfully"
+      }
+    }
+  },
+
+  "disposable_email_domains": {
+    "_note": "These domains should be BLOCKED by fraud detection",
+    "domains": [
+      "tempmail.com",
+      "guerrillamail.com",
+      "10minutemail.com",
+      "throwaway.email",
+      "mailinator.com",
+      "trash-mail.com"
+    ],
+    "test_pattern": "test@{domain}",
+    "expected_behavior": "Fraud check blocks with risk_score >= 50"
+  },
+
+  "boundary_values": {
+    "amounts": {
+      "exactly_minimum": "1.00",
+      "just_above_minimum": "1.01",
+      "just_below_maximum": "99999.99",
+      "exactly_maximum": "100000.00"
+    },
+    "service_description_lengths": {
+      "empty": "",
+      "one_char": "X",
+      "499_chars": "exactly 499 characters...",
+      "500_chars": "exactly 500 characters..."
+    },
+    "email_lengths": {
+      "short": "a@b.co",
+      "typical": "patient@example.com",
+      "long_but_valid": "verylongbutvalidemailaddress@verylong domainname.com",
+      "maximum_320": "exactly 320 characters..."
+    }
+  },
+
+  "fraud_detection_scenarios": {
+    "disposable_email": {
+      "risk_score": 50,
+      "risk_level": "CRITICAL",
+      "blocked": true
+    },
+    "suspicious_amount_test_value": {
+      "amounts": ["0.01", "1.00", "9999.99", "10000.00"],
+      "risk_score": 20,
+      "risk_level": "LOW",
+      "blocked": false
+    },
+    "high_value_transaction": {
+      "threshold": 5000.00,
+      "risk_score": 15,
+      "risk_level": "MEDIUM",
+      "blocked": false,
+      "review_required": true
+    },
+    "non_default_currency": {
+      "currencies": ["CAD", "EUR", "GBP", "AUD"],
+      "risk_score": 10,
+      "risk_level": "LOW",
+      "blocked": false
+    }
+  },
+
+  "idempotency_testing": {
+    "_note": "Idempotency prevents duplicate charges",
+    "window_hours": 24,
+    "test_procedure": [
+      "1. Send request with invoice_reference = INV-DUPLICATE-TEST",
+      "2. Wait for success response",
+      "3. Send IDENTICAL request again",
+      "4. Verify second request returns duplicate detected",
+      "5. Confirm only ONE invoice exists in payment gateway"
+    ],
+    "critical_rule": "Patient must NEVER be charged twice for same invoice_reference"
+  },
+
+  "special_characters_testing": {
+    "patient_names": {
+      "accents": "François",
+      "umlauts": "Müller",
+      "hyphens": "Mary-Jane",
+      "apostrophes": "O'Brien",
+      "combined": "François Müller-O'Brien"
+    },
+    "service_descriptions": {
+      "accented_text": "Consultation générale",
+      "ampersands": "Exam & Lab Work",
+      "quotes": "Patient's initial visit",
+      "parentheses": "Follow-up (2nd visit)"
+    }
+  },
+
+  "quick_reference": {
+    "edge_cases_to_always_test": [
+      "Disposable email domains (fraud detection)",
+      "Duplicate invoice_reference (idempotency)",
+      "High-value transactions (manual review flag)",
+      "Boundary amounts (exactly $1.00 and $100,000.00)",
+      "International characters (UTF-8 encoding)",
+      "Non-default currencies (risk scoring)",
+      "Maximum field lengths (service description, email)"
+    ],
+    "expected_outcomes": {
+      "disposable_email": "BLOCKED",
+      "duplicate_invoice": "DUPLICATE DETECTED",
+      "high_value": "FLAGGED FOR REVIEW",
+      "boundary_values": "SUCCESS",
+      "international_chars": "SUCCESS",
+      "non_default_currency": "SUCCESS WITH WARNING"
+    }
+  }
+}

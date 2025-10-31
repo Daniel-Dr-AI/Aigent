@@ -1,0 +1,182 @@
+{
+  "_description": "Happy path test data for Module 04: Billing & Payments",
+  "_usage": "Use these complete, valid payment requests to test successful invoice creation and payment processing",
+  "_note": "All data is fictional and safe for testing. Replace YOUR-WEBHOOK-URL with your actual n8n webhook URL",
+
+  "test_cases": [
+    {
+      "test_id": "HP-001",
+      "test_name": "Create Invoice Link (Standard Workflow)",
+      "_expected": "Invoice created, email sent, logged to sheets",
+      "data": {
+        "patient_email": "sarah.johnson.test@example.com",
+        "patient_name": "Sarah Johnson",
+        "patient_id": "PT-2025-001",
+        "amount": "150.00",
+        "currency": "USD",
+        "service_description": "Initial consultation - 60 minutes",
+        "invoice_reference": "INV-2025-001",
+        "billing_mode": "invoice_link"
+      }
+    },
+    {
+      "test_id": "HP-002",
+      "test_name": "Charge Payment Immediately",
+      "_expected": "Payment charged, receipt sent, status = paid",
+      "data": {
+        "patient_email": "michael.chen.test@example.com",
+        "patient_name": "Michael Chen",
+        "patient_id": "PT-2025-002",
+        "amount": "225.50",
+        "currency": "USD",
+        "service_description": "Follow-up appointment + lab review",
+        "invoice_reference": "INV-2025-003",
+        "billing_mode": "charge_now",
+        "payment_method_id": "pm_card_visa"
+      }
+    },
+    {
+      "test_id": "HP-003",
+      "test_name": "Multi-Currency Payment (CAD)",
+      "_expected": "Invoice created in Canadian dollars",
+      "data": {
+        "patient_email": "emma.martin.test@example.com",
+        "patient_name": "Emma Martin",
+        "patient_id": "PT-2025-004",
+        "amount": "200.00",
+        "currency": "CAD",
+        "service_description": "Telehealth consultation",
+        "invoice_reference": "INV-2025-005",
+        "billing_mode": "invoice_link"
+      }
+    },
+    {
+      "test_id": "HP-004",
+      "test_name": "Partial Payment Allowed",
+      "_expected": "Invoice allows partial payments with minimum $100",
+      "data": {
+        "patient_email": "david.wilson.test@example.com",
+        "patient_name": "David Wilson",
+        "patient_id": "PT-2025-006",
+        "amount": "500.00",
+        "currency": "USD",
+        "service_description": "Specialist consultation + diagnostics",
+        "invoice_reference": "INV-2025-007",
+        "billing_mode": "invoice_link",
+        "allow_partial_payment": true,
+        "minimum_amount": "100.00"
+      }
+    },
+    {
+      "test_id": "HP-EXTRA-01",
+      "test_name": "EUR Currency Payment",
+      "_expected": "Invoice created in Euros",
+      "data": {
+        "patient_email": "francois.dubois.test@example.com",
+        "patient_name": "François Dubois",
+        "patient_id": "PT-2025-010",
+        "amount": "180.00",
+        "currency": "EUR",
+        "service_description": "Annual checkup + blood work",
+        "invoice_reference": "INV-2025-011",
+        "billing_mode": "invoice_link"
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "invoice_link_usd": {
+      "description": "Create invoice and send payment link (most common)",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"sarah.johnson.test@example.com\",\n    \"patient_name\": \"Sarah Johnson\",\n    \"patient_id\": \"PT-2025-001\",\n    \"amount\": \"150.00\",\n    \"currency\": \"USD\",\n    \"service_description\": \"Initial consultation - 60 minutes\",\n    \"invoice_reference\": \"INV-2025-001\",\n    \"billing_mode\": \"invoice_link\"\n  }'",
+      "expected_response": {
+        "status": "success",
+        "message": "Invoice created and sent successfully",
+        "invoice_id": "in_1ABC...",
+        "hosted_invoice_url": "https://invoice.stripe.com/...",
+        "trace_id": "PAY-1730390000000"
+      }
+    },
+    "charge_now": {
+      "description": "Charge payment immediately",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"michael.chen.test@example.com\",\n    \"patient_name\": \"Michael Chen\",\n    \"patient_id\": \"PT-2025-002\",\n    \"amount\": \"225.50\",\n    \"currency\": \"USD\",\n    \"service_description\": \"Follow-up appointment + lab review\",\n    \"invoice_reference\": \"INV-2025-003\",\n    \"billing_mode\": \"charge_now\",\n    \"payment_method_id\": \"pm_card_visa\"\n  }'",
+      "expected_response": {
+        "status": "success",
+        "message": "Payment charged successfully",
+        "charge_id": "ch_1ABC...",
+        "amount_charged": "225.50",
+        "receipt_url": "https://pay.stripe.com/receipts/..."
+      }
+    },
+    "multi_currency_cad": {
+      "description": "Create invoice in Canadian dollars",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"emma.martin.test@example.com\",\n    \"patient_name\": \"Emma Martin\",\n    \"patient_id\": \"PT-2025-004\",\n    \"amount\": \"200.00\",\n    \"currency\": \"CAD\",\n    \"service_description\": \"Telehealth consultation\",\n    \"invoice_reference\": \"INV-2025-005\",\n    \"billing_mode\": \"invoice_link\"\n  }'",
+      "expected_response": {
+        "status": "success",
+        "currency": "CAD",
+        "amount": "200.00"
+      }
+    }
+  },
+
+  "stripe_test_cards": {
+    "_note": "Use these test cards with Stripe (TEST mode only)",
+    "success": {
+      "number": "4242 4242 4242 4242",
+      "expiry": "12/28",
+      "cvc": "123",
+      "behavior": "Payment succeeds"
+    },
+    "decline_generic": {
+      "number": "4000 0000 0000 0002",
+      "expiry": "12/28",
+      "cvc": "123",
+      "behavior": "Generic decline"
+    },
+    "insufficient_funds": {
+      "number": "4000 0000 0000 9995",
+      "expiry": "12/28",
+      "cvc": "123",
+      "behavior": "Insufficient funds decline"
+    }
+  },
+
+  "valid_amounts": {
+    "minimum": "1.00",
+    "typical_consultation": "150.00",
+    "with_cents": "225.50",
+    "higher_service": "500.00",
+    "high_value": "7500.00",
+    "maximum": "100000.00"
+  },
+
+  "valid_currencies": [
+    "USD",
+    "CAD",
+    "EUR",
+    "GBP",
+    "AUD"
+  ],
+
+  "quick_reference": {
+    "required_fields": [
+      "patient_email",
+      "patient_name",
+      "patient_id",
+      "amount",
+      "service_description",
+      "invoice_reference"
+    ],
+    "optional_fields": [
+      "currency (default: USD)",
+      "billing_mode (default: invoice_link)",
+      "payment_gateway (default: stripe)",
+      "allow_partial_payment",
+      "minimum_amount",
+      "metadata"
+    ],
+    "billing_modes": {
+      "invoice_link": "Send payment link via email (customer pays later)",
+      "charge_now": "Charge immediately (requires payment_method_id)"
+    }
+  }
+}

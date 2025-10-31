@@ -1,0 +1,281 @@
+{
+  "_description": "Invalid test data for Module 04: Billing & Payments",
+  "_usage": "Use these intentionally invalid requests to test validation and error handling",
+  "_expected": "All requests should be REJECTED with clear error messages",
+
+  "test_cases": [
+    {
+      "test_id": "INV-001",
+      "test_name": "Missing Required Field - Email",
+      "_expected_error": "patient_email: required and must be valid email format",
+      "data": {
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-100",
+        "amount": "100.00",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-001"
+      },
+      "_note": "patient_email is intentionally missing"
+    },
+    {
+      "test_id": "INV-002",
+      "test_name": "Invalid Email Format",
+      "_expected_error": "patient_email: required and must be valid email format",
+      "data": {
+        "patient_email": "not-an-email",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-101",
+        "amount": "100.00",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-002"
+      },
+      "_note": "Email format is invalid (no @ or domain)"
+    },
+    {
+      "test_id": "INV-003",
+      "test_name": "Amount Below Minimum",
+      "_expected_error": "amount: minimum charge is $1",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-102",
+        "amount": "0.50",
+        "currency": "USD",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-003"
+      },
+      "_note": "Amount $0.50 is below minimum $1.00"
+    },
+    {
+      "test_id": "INV-004",
+      "test_name": "Amount Above Maximum (Fraud Protection)",
+      "_expected_error": "amount: maximum charge is $100000 (fraud protection)",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-103",
+        "amount": "999999.00",
+        "currency": "USD",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-004"
+      },
+      "_note": "Amount $999,999 exceeds maximum $100,000"
+    },
+    {
+      "test_id": "INV-005",
+      "test_name": "Invalid Currency Code",
+      "_expected_error": "currency: must be one of USD, CAD, EUR, GBP, AUD",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-104",
+        "amount": "100.00",
+        "currency": "XYZ",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-005"
+      },
+      "_note": "XYZ is not a valid ISO 4217 currency code"
+    },
+    {
+      "test_id": "INV-006",
+      "test_name": "Missing Invoice Reference",
+      "_expected_error": "invoice_reference: required for duplicate prevention",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-105",
+        "amount": "100.00",
+        "service_description": "Test service"
+      },
+      "_note": "invoice_reference is missing (prevents idempotency)"
+    },
+    {
+      "test_id": "INV-EXTRA-01",
+      "test_name": "Amount Without Decimals",
+      "_expected_error": "amount: must have exactly 2 decimal places (e.g., 150.00)",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-106",
+        "amount": "150",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-006"
+      },
+      "_note": "Amount must have 2 decimal places (150.00 not 150)"
+    },
+    {
+      "test_id": "INV-EXTRA-02",
+      "test_name": "Email Too Long",
+      "_expected_error": "patient_email: maximum 320 characters (RFC 5321)",
+      "data": {
+        "patient_email": "verylongemailaddressthatexceedsthemaximumlengthallowedbytheRFC5321standard@anextremelylong domainthatcontinuestoexceedthemaximumlengthuntilwereachoverthreehundredtwentycharacterswhichisabsolutelyridiculous.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-107",
+        "amount": "100.00",
+        "service_description": "Test service",
+        "invoice_reference": "INV-TEST-007"
+      },
+      "_note": "Email exceeds 320 character limit"
+    },
+    {
+      "test_id": "INV-EXTRA-03",
+      "test_name": "Service Description Too Long",
+      "_expected_error": "service_description: maximum 500 characters",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-108",
+        "amount": "100.00",
+        "service_description": "This is an extremely long service description that exceeds the maximum allowed length of 500 characters. It goes on and on describing the service in unnecessary detail that would never actually be needed in a real billing scenario. We continue to add more text here to ensure we definitely exceed the 500 character limit. More text more text more text more text more text more text more text more text more text more text more text more text more text more text more text more text more text.",
+        "invoice_reference": "INV-TEST-008"
+      },
+      "_note": "Service description exceeds 500 characters"
+    },
+    {
+      "test_id": "INV-EXTRA-04",
+      "test_name": "Invalid Invoice Reference Format",
+      "_expected_error": "invoice_reference: must be alphanumeric with dashes only",
+      "data": {
+        "patient_email": "test@example.com",
+        "patient_name": "Test Patient",
+        "patient_id": "PT-2025-109",
+        "amount": "100.00",
+        "service_description": "Test service",
+        "invoice_reference": "INV@2025#SPECIAL!"
+      },
+      "_note": "Invoice reference contains special characters (only alphanumeric and dashes allowed)"
+    }
+  ],
+
+  "curl_examples": {
+    "missing_email": {
+      "description": "Test missing required field validation",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-100\",\n    \"amount\": \"100.00\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-TEST-001\"\n  }'",
+      "expected_response": {
+        "status": "error",
+        "message": "Validation failed",
+        "errors": [
+          "patient_email: required and must be valid email format"
+        ]
+      }
+    },
+    "invalid_email_format": {
+      "description": "Test email format validation",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"not-an-email\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-101\",\n    \"amount\": \"100.00\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-TEST-002\"\n  }'",
+      "expected_response": {
+        "status": "error",
+        "message": "Validation failed",
+        "errors": [
+          "patient_email: required and must be valid email format"
+        ]
+      }
+    },
+    "amount_too_low": {
+      "description": "Test minimum amount validation",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"test@example.com\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-102\",\n    \"amount\": \"0.50\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-TEST-003\"\n  }'",
+      "expected_response": {
+        "status": "error",
+        "message": "Validation failed",
+        "errors": [
+          "amount: minimum charge is $1"
+        ]
+      }
+    },
+    "amount_too_high": {
+      "description": "Test maximum amount validation (fraud protection)",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"test@example.com\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-103\",\n    \"amount\": \"999999.00\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-TEST-004\"\n  }'",
+      "expected_response": {
+        "status": "error",
+        "message": "Validation failed",
+        "errors": [
+          "amount: maximum charge is $100000 (fraud protection)"
+        ]
+      }
+    },
+    "invalid_currency": {
+      "description": "Test currency code validation",
+      "command": "curl -X POST YOUR-WEBHOOK-URL \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"patient_email\": \"test@example.com\",\n    \"patient_name\": \"Test Patient\",\n    \"patient_id\": \"PT-2025-104\",\n    \"amount\": \"100.00\",\n    \"currency\": \"XYZ\",\n    \"service_description\": \"Test service\",\n    \"invoice_reference\": \"INV-TEST-005\"\n  }'",
+      "expected_response": {
+        "status": "error",
+        "message": "Validation failed",
+        "errors": [
+          "currency: must be one of USD, CAD, EUR, GBP, AUD"
+        ]
+      }
+    }
+  },
+
+  "validation_rules": {
+    "patient_email": {
+      "required": true,
+      "format": "Valid email format (user@domain.com)",
+      "max_length": 320,
+      "example_valid": "patient@example.com",
+      "example_invalid": [
+        "not-an-email",
+        "missing@",
+        "@nodomain.com",
+        "toolong..."
+      ]
+    },
+    "amount": {
+      "required": true,
+      "min": 1.00,
+      "max": 100000.00,
+      "format": "Must have exactly 2 decimal places",
+      "example_valid": "150.00",
+      "example_invalid": [
+        "150",
+        "0.50",
+        "999999.00",
+        "150.5",
+        "150.001"
+      ]
+    },
+    "currency": {
+      "required": false,
+      "default": "USD",
+      "valid_values": ["USD", "CAD", "EUR", "GBP", "AUD"],
+      "example_valid": "USD",
+      "example_invalid": [
+        "XYZ",
+        "usd",
+        "US Dollar",
+        "123"
+      ]
+    },
+    "invoice_reference": {
+      "required": true,
+      "format": "Alphanumeric with dashes only",
+      "max_length": 255,
+      "example_valid": "INV-2025-001",
+      "example_invalid": [
+        "",
+        "INV@2025",
+        "INV#123",
+        "INV 2025"
+      ]
+    },
+    "service_description": {
+      "required": true,
+      "min_length": 1,
+      "max_length": 500,
+      "example_valid": "Initial consultation - 60 minutes",
+      "example_invalid": [
+        "",
+        "   ",
+        "text that exceeds 500 characters..."
+      ]
+    }
+  },
+
+  "error_response_format": {
+    "_note": "All validation errors follow this format",
+    "status": "error",
+    "message": "Validation failed",
+    "errors": [
+      "field_name: error description"
+    ],
+    "validated_at": "2025-10-31T12:34:56.789Z"
+  }
+}

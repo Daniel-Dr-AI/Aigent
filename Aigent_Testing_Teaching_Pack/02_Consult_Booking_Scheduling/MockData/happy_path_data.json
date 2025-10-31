@@ -1,0 +1,195 @@
+{
+  "_description": "Valid test data for Module 02 Happy Path tests - All data is correctly formatted and should result in successful bookings",
+  "_usage": "Use these examples for TC-HP-001 through TC-HP-005 tests",
+  "_note": "Replace dates with future dates (at least tomorrow) before testing. Times are in 24-hour format.",
+
+  "test_cases": [
+    {
+      "test_id": "TC-HP-001",
+      "name": "Book Valid Appointment with Preferred Date/Time",
+      "description": "Complete booking with all required fields and preferred time slot",
+      "data": {
+        "contact_id": "MOCK-001",
+        "email": "sarah.johnson@example.com",
+        "name": "Sarah Johnson",
+        "phone": "+1-555-0101",
+        "service_type": "Initial Consultation",
+        "preferred_date": "2025-11-15",
+        "preferred_time": "14:30",
+        "timezone": "America/New_York",
+        "notes": "First-time patient, referred by Dr. Smith"
+      },
+      "expected_result": {
+        "success": true,
+        "booking_id_pattern": "BOOK-[timestamp]",
+        "appointment_time": "2025-11-15T14:30:00-05:00",
+        "confirmation_email": true,
+        "confirmation_sms": true,
+        "calendar_event_created": true
+      }
+    },
+
+    {
+      "test_id": "TC-HP-002",
+      "name": "Book Appointment Without Specifying Date/Time",
+      "description": "Let system recommend optimal time slot based on availability and no-show patterns",
+      "data": {
+        "contact_id": "MOCK-002",
+        "email": "michael.chen@example.com",
+        "name": "Michael Chen",
+        "phone": "+1-555-0102",
+        "service_type": "Follow-up Visit",
+        "timezone": "America/Los_Angeles"
+      },
+      "expected_result": {
+        "success": true,
+        "selection_method": "smart_recommendation",
+        "recommendation_score": "0.7-1.0",
+        "alternatives_provided": true,
+        "appointment_during_business_hours": true
+      },
+      "_note": "System will choose best available slot - time will vary"
+    },
+
+    {
+      "test_id": "TC-HP-003",
+      "name": "Book Appointment with Different Timezone",
+      "description": "Test timezone conversion - patient in Denver, clinic in New York",
+      "data": {
+        "contact_id": "MOCK-003",
+        "email": "emma.rodriguez@example.com",
+        "name": "Emma Rodriguez",
+        "phone": "+1-555-0103",
+        "service_type": "Telehealth Consultation",
+        "preferred_date": "2025-11-16",
+        "preferred_time": "10:00",
+        "timezone": "America/Denver"
+      },
+      "expected_result": {
+        "success": true,
+        "patient_timezone": "America/Denver",
+        "patient_local_time": "10:00 AM Mountain Time",
+        "clinic_timezone": "America/New_York",
+        "clinic_local_time": "12:00 PM Eastern Time",
+        "timezone_offset_hours": 2
+      },
+      "_note": "10:00 AM Mountain = 12:00 PM Eastern (2 hour difference)"
+    },
+
+    {
+      "test_id": "TC-HP-004",
+      "name": "Book Appointment for Existing Contact",
+      "description": "Returning patient booking - should update CRM record, not create duplicate",
+      "data": {
+        "contact_id": "CRM-12345",
+        "email": "david.kim@example.com",
+        "name": "David Kim",
+        "phone": "+1-555-0104",
+        "service_type": "Annual Physical",
+        "preferred_date": "2025-11-18",
+        "preferred_time": "09:00",
+        "timezone": "America/Chicago",
+        "referral_source": "patient_portal"
+      },
+      "expected_result": {
+        "success": true,
+        "patient_type": "existing",
+        "crm_updated": true,
+        "no_duplicate_created": true
+      }
+    },
+
+    {
+      "test_id": "TC-HP-005",
+      "name": "Book Appointment with All Optional Fields",
+      "description": "Complete booking with all optional fields populated",
+      "data": {
+        "contact_id": "MOCK-005",
+        "email": "lisa.patel@example.com",
+        "name": "Lisa Patel",
+        "phone": "+1-555-0105",
+        "service_type": "Specialist Referral",
+        "preferred_date": "2025-11-20",
+        "preferred_time": "15:30",
+        "timezone": "America/New_York",
+        "notes": "Patient has mobility issues, needs ground floor exam room",
+        "referral_source": "google_ads",
+        "insurance_provider": "Blue Cross Blue Shield",
+        "reason_for_visit": "Chronic back pain evaluation"
+      },
+      "expected_result": {
+        "success": true,
+        "all_optional_fields_stored": true,
+        "notes_preserved": true,
+        "staff_notified_of_accessibility_need": true
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "_note": "Replace YOUR-WEBHOOK-URL with your actual webhook URL and update dates to future dates",
+
+    "TC_HP_001": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"contact_id\":\"MOCK-001\",\"email\":\"sarah.johnson@example.com\",\"name\":\"Sarah Johnson\",\"phone\":\"+1-555-0101\",\"service_type\":\"Initial Consultation\",\"preferred_date\":\"2025-11-15\",\"preferred_time\":\"14:30\",\"timezone\":\"America/New_York\",\"notes\":\"First-time patient, referred by Dr. Smith\"}'",
+
+    "TC_HP_002": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"contact_id\":\"MOCK-002\",\"email\":\"michael.chen@example.com\",\"name\":\"Michael Chen\",\"phone\":\"+1-555-0102\",\"service_type\":\"Follow-up Visit\",\"timezone\":\"America/Los_Angeles\"}'",
+
+    "TC_HP_003": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"contact_id\":\"MOCK-003\",\"email\":\"emma.rodriguez@example.com\",\"name\":\"Emma Rodriguez\",\"phone\":\"+1-555-0103\",\"service_type\":\"Telehealth Consultation\",\"preferred_date\":\"2025-11-16\",\"preferred_time\":\"10:00\",\"timezone\":\"America/Denver\"}'",
+
+    "TC_HP_004": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"contact_id\":\"CRM-12345\",\"email\":\"david.kim@example.com\",\"name\":\"David Kim\",\"phone\":\"+1-555-0104\",\"service_type\":\"Annual Physical\",\"preferred_date\":\"2025-11-18\",\"preferred_time\":\"09:00\",\"timezone\":\"America/Chicago\",\"referral_source\":\"patient_portal\"}'",
+
+    "TC_HP_005": "curl -X POST \"YOUR-WEBHOOK-URL\" -H \"Content-Type: application/json\" -d '{\"contact_id\":\"MOCK-005\",\"email\":\"lisa.patel@example.com\",\"name\":\"Lisa Patel\",\"phone\":\"+1-555-0105\",\"service_type\":\"Specialist Referral\",\"preferred_date\":\"2025-11-20\",\"preferred_time\":\"15:30\",\"timezone\":\"America/New_York\",\"notes\":\"Patient has mobility issues, needs ground floor exam room\",\"referral_source\":\"google_ads\",\"insurance_provider\":\"Blue Cross Blue Shield\",\"reason_for_visit\":\"Chronic back pain evaluation\"}'"
+  },
+
+  "common_service_types": [
+    "Initial Consultation",
+    "Follow-up Visit",
+    "Annual Physical",
+    "Specialist Referral",
+    "Telehealth Consultation",
+    "Urgent Care"
+  ],
+
+  "common_timezones": [
+    {
+      "name": "America/New_York",
+      "description": "Eastern Time (US & Canada)",
+      "utc_offset_standard": "-05:00",
+      "utc_offset_daylight": "-04:00"
+    },
+    {
+      "name": "America/Chicago",
+      "description": "Central Time (US & Canada)",
+      "utc_offset_standard": "-06:00",
+      "utc_offset_daylight": "-05:00"
+    },
+    {
+      "name": "America/Denver",
+      "description": "Mountain Time (US & Canada)",
+      "utc_offset_standard": "-07:00",
+      "utc_offset_daylight": "-06:00"
+    },
+    {
+      "name": "America/Los_Angeles",
+      "description": "Pacific Time (US & Canada)",
+      "utc_offset_standard": "-08:00",
+      "utc_offset_daylight": "-07:00"
+    },
+    {
+      "name": "Europe/London",
+      "description": "GMT/BST (United Kingdom)",
+      "utc_offset_standard": "+00:00",
+      "utc_offset_daylight": "+01:00"
+    }
+  ],
+
+  "testing_tips": [
+    "Always use FUTURE dates (at least tomorrow)",
+    "Use 24-hour time format (14:30, not 2:30 PM)",
+    "Use IANA timezone names (America/New_York), not abbreviations (EST)",
+    "Verify calendar event actually created after booking",
+    "Test .ics attachment downloads and opens correctly",
+    "Check both email AND SMS were sent",
+    "Use test calendar, not production calendar",
+    "Clean up test appointments from calendar after testing"
+  ]
+}

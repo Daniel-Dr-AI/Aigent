@@ -1,0 +1,200 @@
+{
+  "_description": "Happy Path Test Data for Module 03: Telehealth Session",
+  "_usage": "Use these examples to test successful telehealth session creation. All data is completely fictional and safe for testing.",
+  "_note": "These tests verify the module works correctly when all data is valid. Each example should result in a 200 OK response with a valid session link.",
+  "_reminder": "NEVER use real patient data! All identities are from /00_Shared/MockIdentities.json",
+
+  "test_scenarios": [
+    {
+      "scenario_id": "HP-001",
+      "scenario_name": "Create Valid Zoom Session - Standard Appointment",
+      "description": "Complete valid booking data for a standard 30-minute telehealth consultation",
+      "_expected": "200 OK, Zoom session created, notifications sent to patient and provider, CRM updated, Google Sheets logged with masked PHI",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_appt_001",
+        "booking_id": "test_booking_001",
+        "patient_name": "Sarah Mitchell",
+        "patient_email": "sarah.test@example.com",
+        "patient_phone": "+15550001234",
+        "scheduled_time": "2025-11-10T14:00:00.000Z",
+        "duration_minutes": 30,
+        "timezone": "America/New_York",
+        "service_type": "General Consultation",
+        "provider_name": "Dr. Emily Chen",
+        "provider_email": "dr.chen@yourclinic.com",
+        "contact_id": "test_contact_001"
+      }
+    },
+
+    {
+      "scenario_id": "HP-002",
+      "scenario_name": "Create Doxy.me Session - Extended Appointment",
+      "description": "Valid booking for 45-minute session using Doxy.me platform (requires TELEHEALTH_PROVIDER_NAME=Doxy.me)",
+      "_expected": "200 OK, Doxy.me session created with room URL and provider parameter",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_doxy_001",
+        "booking_id": "test_booking_002",
+        "patient_name": "Michael Rodriguez",
+        "patient_email": "michael.test@example.com",
+        "patient_phone": "+15550005678",
+        "scheduled_time": "2025-11-11T15:30:00.000Z",
+        "duration_minutes": 45,
+        "timezone": "America/Chicago",
+        "service_type": "Follow-up Consultation",
+        "provider_name": "Dr. James Wilson",
+        "provider_email": "dr.wilson@yourclinic.com",
+        "contact_id": "test_contact_002"
+      }
+    },
+
+    {
+      "scenario_id": "HP-003",
+      "scenario_name": "Minimal Required Fields - Use Defaults",
+      "description": "Test with only required fields. Optional fields should use environment variable defaults (duration=30, timezone=clinic default, provider=default)",
+      "_expected": "200 OK, session created with default values applied",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_minimal_001",
+        "patient_name": "Emma Thompson",
+        "patient_email": "emma.test@example.com",
+        "scheduled_time": "2025-11-12T10:00:00.000Z"
+      }
+    },
+
+    {
+      "scenario_id": "HP-004",
+      "scenario_name": "Early Morning Appointment - Pacific Time",
+      "description": "Test early morning slot in Pacific timezone",
+      "_expected": "200 OK, session created with correct Pacific timezone",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_early_001",
+        "patient_name": "David Kim",
+        "patient_email": "david.test@example.com",
+        "patient_phone": "+15550002345",
+        "scheduled_time": "2025-11-13T08:00:00.000Z",
+        "duration_minutes": 30,
+        "timezone": "America/Los_Angeles",
+        "service_type": "Initial Consultation",
+        "provider_name": "Dr. Lisa Park",
+        "provider_email": "dr.park@yourclinic.com"
+      }
+    },
+
+    {
+      "scenario_id": "HP-005",
+      "scenario_name": "Long Appointment - Therapy Session",
+      "description": "Test maximum reasonable duration (120 minutes) for therapy session",
+      "_expected": "200 OK, 2-hour session created successfully",
+
+      "test_data": {
+        "appointment_confirmed": true,
+        "appointment_id": "test_long_001",
+        "patient_name": "Jennifer Williams",
+        "patient_email": "jennifer.test@example.com",
+        "patient_phone": "+15550003456",
+        "scheduled_time": "2025-11-14T13:00:00.000Z",
+        "duration_minutes": 120,
+        "timezone": "America/New_York",
+        "service_type": "Therapy Session",
+        "provider_name": "Dr. Robert Anderson",
+        "provider_email": "dr.anderson@yourclinic.com"
+      }
+    }
+  ],
+
+  "curl_examples": {
+    "_instruction": "Replace YOUR-WEBHOOK-URL with your actual webhook URL from n8n",
+
+    "hp_001_standard_zoom": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_appt_001\", \"booking_id\": \"test_booking_001\", \"patient_name\": \"Sarah Mitchell\", \"patient_email\": \"sarah.test@example.com\", \"patient_phone\": \"+15550001234\", \"scheduled_time\": \"2025-11-10T14:00:00.000Z\", \"duration_minutes\": 30, \"timezone\": \"America/New_York\", \"service_type\": \"General Consultation\", \"provider_name\": \"Dr. Emily Chen\", \"provider_email\": \"dr.chen@yourclinic.com\", \"contact_id\": \"test_contact_001\"}'",
+
+    "hp_002_doxy_me": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_doxy_001\", \"patient_name\": \"Michael Rodriguez\", \"patient_email\": \"michael.test@example.com\", \"patient_phone\": \"+15550005678\", \"scheduled_time\": \"2025-11-11T15:30:00.000Z\", \"duration_minutes\": 45, \"provider_name\": \"Dr. James Wilson\"}'",
+
+    "hp_003_minimal_fields": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_minimal_001\", \"patient_name\": \"Emma Thompson\", \"patient_email\": \"emma.test@example.com\", \"scheduled_time\": \"2025-11-12T10:00:00.000Z\"}'",
+
+    "hp_004_early_morning": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_early_001\", \"patient_name\": \"David Kim\", \"patient_email\": \"david.test@example.com\", \"scheduled_time\": \"2025-11-13T08:00:00.000Z\", \"timezone\": \"America/Los_Angeles\"}'",
+
+    "hp_005_long_session": "curl -X POST YOUR-WEBHOOK-URL -H \"Content-Type: application/json\" -d '{\"appointment_confirmed\": true, \"appointment_id\": \"test_long_001\", \"patient_name\": \"Jennifer Williams\", \"patient_email\": \"jennifer.test@example.com\", \"scheduled_time\": \"2025-11-14T13:00:00.000Z\", \"duration_minutes\": 120}'"
+  },
+
+  "expected_results_example": {
+    "_note": "This is what a successful response should look like",
+
+    "http_status": 200,
+    "response_body": {
+      "success": true,
+      "message": "Telehealth session created successfully",
+      "data": {
+        "session_id": "clinic-001_test_appt_001_1730822400000",
+        "appointment_id": "test_appt_001",
+        "platform_meeting_id": "1234567890",
+        "session_link": "https://zoom.us/j/1234567890?pwd=abc123",
+        "host_link": "https://zoom.us/s/1234567890?zak=xyz789",
+        "session_password": "secure123",
+        "scheduled_time": "2025-11-10T14:00:00.000Z",
+        "scheduled_time_formatted": "Sunday, November 10, 2025 at 2:00 PM",
+        "duration_minutes": 30,
+        "timezone": "America/New_York",
+        "expires_at": "2025-11-11T14:00:00.000Z",
+        "patient_email": "sarah.test@example.com",
+        "patient_name": "Sarah Mitchell",
+        "provider_name": "Dr. Emily Chen",
+        "provider": "Zoom"
+      },
+      "metadata": {
+        "workflow_version": "1.1.0-enhanced",
+        "trace_id": "SESSION-1730822400000",
+        "execution_time_ms": 1850,
+        "performance_category": "fast",
+        "crm_updated": true,
+        "patient_sms_sent": true,
+        "patient_email_sent": true,
+        "provider_email_sent": true,
+        "logged": true,
+        "phi_level": "HIGH",
+        "security_compliant": true
+      }
+    },
+
+    "notifications_sent": {
+      "patient_sms": "Delivered to +15550001234 with join link and password",
+      "patient_email": "Sent to sarah.test@example.com with join button and pre-appointment checklist",
+      "provider_email": "Sent to dr.chen@yourclinic.com with host link and full patient contact info. Subject uses masked name: 'Telehealth Ready - S*** M*** - Nov 10, 2:00 PM'"
+    },
+
+    "crm_updates": {
+      "hubspot_contact": "test_contact_001",
+      "fields_updated": {
+        "telehealth_status": "SCHEDULED",
+        "telehealth_link": "https://zoom.us/j/1234567890?pwd=abc123",
+        "telehealth_session_id": "clinic-001_test_appt_001_1730822400000",
+        "telehealth_platform": "Zoom",
+        "telehealth_expires_at": "2025-11-11T14:00:00.000Z"
+      }
+    },
+
+    "google_sheets_log": {
+      "_note": "PHI should be MASKED in Google Sheets",
+      "patient_name_masked": "S*** M***",
+      "patient_email_masked": "s***h@example.com",
+      "patient_phone_masked": "+1-555-***-4234"
+    }
+  },
+
+  "testing_tips": [
+    "Always use future dates for scheduled_time (at least 1 day from now)",
+    "Check all 6 observability sources after each test (HTTP, n8n log, SMS, email, CRM, Sheets)",
+    "Verify PHI masking in Google Sheets (NEVER full patient data)",
+    "Confirm provider email subject uses masked patient name",
+    "Test phone number must be in E.164 format: +15551234567",
+    "Email addresses should be test addresses you control",
+    "If CRM update fails, workflow should still succeed (graceful degradation)",
+    "Execution time should be <3000ms for all tests"
+  ]
+}
