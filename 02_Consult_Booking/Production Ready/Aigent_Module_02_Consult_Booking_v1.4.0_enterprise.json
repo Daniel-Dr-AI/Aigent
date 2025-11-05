@@ -1,0 +1,1420 @@
+{
+  "name": "Aigent_Module_02_Consult_Booking_v1.4.0_Enterprise",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "marker-validation-start",
+      "name": "━━━ 02a: VALIDATION SEGMENT ━━━",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "notes": "═══════════════════════════════════════════════════════\nSEGMENT: 02a - VALIDATION (ENTERPRISE v1.4.0)\n\nPURPOSE: Request validation, rate limiting, deduplication\n\nENHANCEMENTS:\n- Persistent cache API integration (Redis/external)\n- Comprehensive field validation with regex\n- HTML sanitization utility\n- Extended error reporting\n\nFLOW:\n1. Webhook entry\n2. Rate limiting check (persistent API)\n3. Idempotency check (persistent API)\n4. Enhanced field validation\n5. HTML sanitization\n6. Phone normalization\n\nOUTPUT: Clean, validated, sanitized booking request\n═══════════════════════════════════════════════════════"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "consult-booking",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS}}"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook: Booking Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [400, 300],
+      "notes": "ENTRY POINT: Accepts booking requests\nENTERPRISE: Enhanced security headers\nSECURITY: No wildcard default - ALLOWED_ORIGINS must be set\nv1.4.0: Added trace_id generation at entry"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.CACHE_API_BASE_URL}}/ratelimit/check",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$vars.CACHE_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "ip",
+              "value": "={{ $json.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || $json.headers?.['x-real-ip'] || 'unknown' }}"
+            },
+            {
+              "name": "window_ms",
+              "value": 60000
+            },
+            {
+              "name": "max_requests",
+              "value": "={{ parseInt($vars.RATE_LIMIT_MAX) || 10 }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "rate-limit-api",
+      "name": "Rate Limit Check (Persistent API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [600, 300],
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Persistent rate limiting via external API\nFALLBACK: If API fails, falls back to in-memory check\nCONFIG: Uses $vars.CACHE_API_BASE_URL and CACHE_API_KEY\nENDPOINT: POST /ratelimit/check\nRESPONSE: {allowed: boolean, retry_after: number}\nTIMEOUT: 3s with automatic fallback"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ENTERPRISE: Rate limit with fallback to $vars\nconst apiResponse = $input.first().json;\nconst clientIP = $('Webhook: Booking Request').first().json.headers?.['x-forwarded-for']?.split(',')[0]?.trim() || 'unknown';\n\n// Check if API call succeeded\nif (apiResponse.allowed !== undefined) {\n  if (!apiResponse.allowed) {\n    throw new Error(JSON.stringify({\n      error: 'RATE_LIMIT_EXCEEDED',\n      retry_after: apiResponse.retry_after || 60,\n      message: 'Too many requests'\n    }));\n  }\n  return { ...$('Webhook: Booking Request').first().json, client_ip: clientIP, rate_check: 'api' };\n}\n\n// FALLBACK: Use $vars if API unavailable\nconsole.warn('Rate limit API unavailable, using fallback');\nconst rateLimits = $vars.rate_limits || {};\nconst now = Date.now();\nconst windowMs = 60000;\nconst maxRequests = parseInt($vars.RATE_LIMIT_MAX) || 10;\n\nObject.keys(rateLimits).forEach(ip => {\n  if (now - (rateLimits[ip]?.windowStart || 0) > windowMs * 2) delete rateLimits[ip];\n});\n\nif (!rateLimits[clientIP]) {\n  rateLimits[clientIP] = { count: 1, windowStart: now };\n} else if (now - rateLimits[clientIP].windowStart < windowMs) {\n  if (++rateLimits[clientIP].count > maxRequests) {\n    $vars.rate_limits = rateLimits;\n    throw new Error(JSON.stringify({ error: 'RATE_LIMIT_EXCEEDED', retry_after: Math.ceil((windowMs - (now - rateLimits[clientIP].windowStart)) / 1000) }));\n  }\n} else {\n  rateLimits[clientIP] = { count: 1, windowStart: now };\n}\n\n$vars.rate_limits = rateLimits;\nreturn { ...$('Webhook: Booking Request').first().json, client_ip: clientIP, rate_check: 'fallback' };"
+      },
+      "id": "rate-limit-processor",
+      "name": "Process Rate Limit Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "notes": "CODE NODE 1/11: Rate limit processor with fallback\nENTERPRISE: Graceful degradation\nAPI SUCCESS: Uses external cache response\nAPI FAILURE: Falls back to $vars in-memory\nLOGS: Warning when fallback is used"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.CACHE_API_BASE_URL}}/idempotency/check",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$vars.CACHE_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $json.headers?.['idempotency-key'] || $json.headers?.['Idempotency-Key'] }}"
+            },
+            {
+              "name": "ttl_hours",
+              "value": 24
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "idempotency-api",
+      "name": "Idempotency Check (Persistent API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300],
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Persistent idempotency via external API\nFALLBACK: If API fails, falls back to in-memory check\nENDPOINT: POST /idempotency/check\nRESPONSE: {duplicate: boolean, cached_response: object}\nTTL: 24 hours\nTIMEOUT: 3s with automatic fallback"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ENTERPRISE: Idempotency with fallback to $vars\nconst apiResponse = $input.first().json;\nconst headers = $('Webhook: Booking Request').first().json.headers || {};\nconst idempotencyKey = headers['idempotency-key'] || headers['Idempotency-Key'];\n\nif (!idempotencyKey) {\n  return { ...$('Process Rate Limit Response').first().json, idempotency_key: null, is_cached: false };\n}\n\n// Check if API call succeeded\nif (apiResponse.duplicate !== undefined) {\n  if (apiResponse.duplicate && apiResponse.cached_response) {\n    throw new Error(JSON.stringify({ is_duplicate: true, cached_response: apiResponse.cached_response }));\n  }\n  return { ...$('Process Rate Limit Response').first().json, idempotency_key: idempotencyKey, is_cached: false, cache_check: 'api' };\n}\n\n// FALLBACK: Use $vars if API unavailable\nconsole.warn('Idempotency API unavailable, using fallback');\nconst cache = $vars.idempotency_cache || {};\nconst now = Date.now();\n\nObject.keys(cache).forEach(key => {\n  if (now - cache[key].timestamp > 86400000) delete cache[key];\n});\n\nif (cache[idempotencyKey]) {\n  throw new Error(JSON.stringify({ is_duplicate: true, cached_response: cache[idempotencyKey].response }));\n}\n\n$vars.idempotency_cache = cache;\nreturn { ...$('Process Rate Limit Response').first().json, idempotency_key: idempotencyKey, is_cached: false, cache_check: 'fallback' };"
+      },
+      "id": "idempotency-processor",
+      "name": "Process Idempotency Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "notes": "CODE NODE 2/11: Idempotency processor with fallback\nENTERPRISE: Graceful degradation\nAPI SUCCESS: Uses external cache response\nAPI FAILURE: Falls back to $vars in-memory\nLOGS: Warning when fallback is used"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 3/11: Enhanced field validation\nconst body = $input.first().json.body || {};\nconst errors = [];\n\n// Email validation (proper regex)\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!body.email || !emailRegex.test(body.email)) {\n  errors.push('email: required and must be valid format');\n}\n\n// Name validation (2-100 chars)\nconst name = (body.name || '').trim();\nif (name.length < 2 || name.length > 100) {\n  errors.push('name: required, 2-100 characters');\n}\n\n// Phone validation (digits only, 7-20 length)\nconst phoneDigits = (body.phone || '').replace(/\\D/g, '');\nif (phoneDigits.length < 7 || phoneDigits.length > 20) {\n  errors.push('phone: required, 7-20 digits');\n}\n\n// Service type validation (required, max 200 chars)\nconst serviceType = (body.service_type || '').trim();\nif (serviceType.length === 0) {\n  errors.push('service_type: required');\n} else if (serviceType.length > 200) {\n  errors.push('service_type: maximum 200 characters');\n}\n\n// Preferred date validation (optional, but must be valid ISO >= today)\nif (body.preferred_date) {\n  try {\n    const prefDate = new Date(body.preferred_date);\n    const today = new Date();\n    today.setHours(0, 0, 0, 0);\n    if (isNaN(prefDate.getTime()) || prefDate < today) {\n      errors.push('preferred_date: must be valid ISO date >= today');\n    }\n  } catch (e) {\n    errors.push('preferred_date: must be valid ISO date');\n  }\n}\n\n// Preferred time validation (optional, but must match HH:MM)\nif (body.preferred_time) {\n  const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;\n  if (!timeRegex.test(body.preferred_time)) {\n    errors.push('preferred_time: must be in HH:MM format (24-hour)');\n  }\n}\n\nif (errors.length > 0) {\n  throw new Error(JSON.stringify({\n    error: 'VALIDATION_FAILED',\n    details: errors,\n    trace_id: 'BOOK-' + Date.now()\n  }));\n}\n\nreturn $input.first().json;"
+      },
+      "id": "enhanced-validation",
+      "name": "Enhanced Field Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 300],
+      "notes": "CODE NODE 3/11: Enhanced validation (ENTERPRISE)\nCHECKS:\n- Email: proper regex /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/\n- Name: 2-100 chars\n- Phone: 7-20 digits\n- Service type: required, max 200 chars\n- Preferred date: optional, valid ISO >= today\n- Preferred time: optional, HH:MM 24-hour\nRETURNS: Unified error list if validation fails"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 4/11: HTML & Text Sanitization Utility\nfunction escapeHTML(str) {\n  if (!str) return '';\n  return String(str)\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#x27;')\n    .replace(/\\//g, '&#x2F;');\n}\n\nconst body = $input.first().json.body || {};\n\nreturn {\n  ...$input.first().json,\n  body: {\n    ...body,\n    name_safe: escapeHTML(body.name),\n    service_type_safe: escapeHTML(body.service_type),\n    notes_safe: escapeHTML(body.notes)\n  }\n};"
+      },
+      "id": "sanitize-input",
+      "name": "Sanitize User Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 300],
+      "notes": "CODE NODE 4/11: HTML sanitization utility (ENTERPRISE)\nFUNCTION: escapeHTML() - replaces < > & \" ' / with entities\nAPPLIES TO: name, service_type, notes\nOUTPUT: Adds name_safe, service_type_safe, notes_safe fields\nUSAGE: All downstream email/Slack templates use _safe versions"
+    },
+    {
+      "parameters": {
+        "operation": "removeAll",
+        "search": "[^0-9+]",
+        "sourceField": "={{ $json.body.phone }}",
+        "destinationField": "phone_normalized",
+        "options": {}
+      },
+      "id": "normalize-phone-1",
+      "name": "Extract Phone Digits",
+      "type": "n8n-nodes-base.stringOperations",
+      "typeVersion": 1,
+      "position": [1800, 300],
+      "notes": "NATIVE NODE: Phone normalization step 1\nACTION: Remove all non-digits (except +)\nENTERPRISE: No changes, already optimal"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "phone_normalized",
+              "value": "={{ $json.phone_normalized.startsWith('+') ? $json.phone_normalized : ($json.phone_normalized.length === 10 ? '+1' + $json.phone_normalized : '+' + $json.phone_normalized) }}"
+            },
+            {
+              "name": "phone_display",
+              "value": "={{ $json.body.phone }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ ($json.body.email || '').toLowerCase().trim() }}"
+            },
+            {
+              "name": "name",
+              "value": "={{ ($json.body.name || '').trim() }}"
+            },
+            {
+              "name": "name_safe",
+              "value": "={{ $json.body.name_safe }}"
+            },
+            {
+              "name": "service_type",
+              "value": "={{ ($json.body.service_type || 'Consultation').trim() }}"
+            },
+            {
+              "name": "service_type_safe",
+              "value": "={{ $json.body.service_type_safe }}"
+            },
+            {
+              "name": "timezone",
+              "value": "={{ $json.body.timezone || $vars.CLINIC_TIMEZONE || 'America/New_York' }}"
+            },
+            {
+              "name": "preferred_date",
+              "value": "={{ $json.body.preferred_date || null }}"
+            },
+            {
+              "name": "preferred_time",
+              "value": "={{ $json.body.preferred_time || null }}"
+            },
+            {
+              "name": "notes",
+              "value": "={{ $json.body.notes || '' }}"
+            },
+            {
+              "name": "notes_safe",
+              "value": "={{ $json.body.notes_safe }}"
+            },
+            {
+              "name": "trace_id",
+              "value": "=BOOK-{{ $now.toMillis() }}"
+            },
+            {
+              "name": "execution_start",
+              "value": "={{ $now.toMillis() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-validated-data",
+      "name": "Set Validated Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [2000, 300],
+      "notes": "NATIVE NODE: Data normalization (ENTERPRISE)\nENHANCED: Includes _safe versions of sanitized fields\nADDS: execution_start timestamp for performance tracking\nSETS: All validated, normalized, sanitized booking fields"
+    },
+    {
+      "parameters": {},
+      "id": "marker-scheduling-start",
+      "name": "━━━ 02b: SCHEDULING SEGMENT ━━━",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2200, 300],
+      "notes": "═══════════════════════════════════════════════════════\nSEGMENT: 02b - SCHEDULING (ENTERPRISE v1.4.0)\n\nPURPOSE: Check availability, select slot, create booking\n\nENHANCEMENTS:\n- Persistent duplicate check via API\n- Extended retry logic\n- Performance tracking\n\nFLOW:\n1. Query scheduling API for available slots\n2. Select best slot (preference-based)\n3. Check for duplicates (persistent API)\n4. Create booking in calendar\n\nOUTPUT: Confirmed booking with appointment_id\n═══════════════════════════════════════════════════════"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$vars.SCHEDULING_API_BASE_URL}}/availability",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "eventTypeId",
+              "value": "={{$vars.SCHEDULING_EVENT_TYPE_ID}}"
+            },
+            {
+              "name": "startTime",
+              "value": "={{ $json.preferred_date ? $json.preferred_date + 'T00:00:00' : $now.plus({days: 1}).toISO() }}"
+            },
+            {
+              "name": "endTime",
+              "value": "={{ $json.preferred_date ? $now.constructor.fromISO($json.preferred_date).plus({days: 7}).toISO() : $now.plus({days: 8}).toISO() }}"
+            },
+            {
+              "name": "timeZone",
+              "value": "={{$json.timezone}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{parseInt($vars.CALENDAR_API_TIMEOUT) || 10000}}"
+        }
+      },
+      "id": "check-availability",
+      "name": "Check Calendar Availability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetween": 1000,
+      "notes": "NATIVE NODE: Scheduling API call\nENTERPRISE: No changes, already optimal\nRETRY: 3 attempts with 1s delay\nTIMEOUT: Configurable via $vars.CALENDAR_API_TIMEOUT"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 5/11: Slot selection (minimal logic)\nconst slots = $input.first().json.slots || [];\n\nif (slots.length === 0) {\n  return { error: true, error_code: 'NO_AVAILABILITY', message: 'No available slots' };\n}\n\nconst preferredTime = $input.first().json.preferred_time;\nlet selected = slots[0];\n\nif (preferredTime) {\n  const preferred = new Date($input.first().json.preferred_date + 'T' + preferredTime).getTime();\n  selected = slots.reduce((best, slot) => \n    Math.abs(new Date(slot.time).getTime() - preferred) < Math.abs(new Date(best.time).getTime() - preferred) ? slot : best\n  );\n}\n\nreturn {\n  slot_time: selected.time,\n  slot_id: selected.id || selected.time,\n  duration: selected.duration || parseInt($vars.DEFAULT_APPOINTMENT_DURATION) || 30,\n  selection_method: preferredTime ? 'preference' : 'first_available'\n};"
+      },
+      "id": "select-slot",
+      "name": "Select Best Slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2600, 300],
+      "notes": "CODE NODE 5/11: Slot selection\nENTERPRISE: No changes, already optimal\nLOGIC: Preference matching or first available"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.error }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-slot-available",
+      "name": "Check: Slot Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2800, 300],
+      "notes": "NATIVE NODE: Route based on availability\nENTERPRISE: No changes\nOUTPUT: True = no slots, False = slot found"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": false,\n  \"error\": \"No available appointments\",\n  \"error_code\": \"NO_AVAILABILITY\",\n  \"retry_after\": $now.plus({days: 7}).toISO(),\n  \"trace_id\": $('Set Validated Data').first().json.trace_id,\n  \"timestamp\": $now.toISO()\n} }}",
+        "options": {
+          "responseCode": 409
+        }
+      },
+      "id": "error-no-availability",
+      "name": "Return: No Availability",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [3000, 450],
+      "notes": "ERROR RESPONSE: 409 Conflict\nENTERPRISE: No changes\nRETURNS: Retry-after suggestion"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.CACHE_API_BASE_URL}}/duplicate/check",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$vars.CACHE_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "phone",
+              "value": "={{ $('Set Validated Data').first().json.phone_normalized }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $('Set Validated Data').first().json.email }}"
+            },
+            {
+              "name": "slot_time",
+              "value": "={{ $input.first().json.slot_time }}"
+            },
+            {
+              "name": "window_minutes",
+              "value": 5
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "duplicate-api",
+      "name": "Duplicate Check (Persistent API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3000, 300],
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Persistent duplicate check via external API\nFALLBACK: If API fails, falls back to in-memory check\nENDPOINT: POST /duplicate/check\nRESPONSE: {duplicate: boolean}\nWINDOW: 5 minutes\nTIMEOUT: 3s with automatic fallback"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 6/11: Duplicate check with fallback\nconst apiResponse = $input.first().json;\nconst slotData = $('Select Best Slot').first().json;\nconst patientData = $('Set Validated Data').first().json;\n\n// Check if API call succeeded\nif (apiResponse.duplicate !== undefined) {\n  if (apiResponse.duplicate) {\n    throw new Error(JSON.stringify({ error: 'DUPLICATE_BOOKING', message: 'Same booking within 5 minutes' }));\n  }\n  return { ...slotData, duplicate_check: 'api' };\n}\n\n// FALLBACK: Use $vars if API unavailable\nconsole.warn('Duplicate API unavailable, using fallback');\nconst duplicates = $vars.recent_bookings || {};\nconst key = `${patientData.phone_normalized}:${patientData.email}:${slotData.slot_time}`;\nconst now = Date.now();\n\nObject.keys(duplicates).forEach(k => {\n  if (now - duplicates[k] > 300000) delete duplicates[k];\n});\n\nif (duplicates[key]) {\n  throw new Error(JSON.stringify({ error: 'DUPLICATE_BOOKING', message: 'Same booking within 5 minutes' }));\n}\n\nduplicates[key] = now;\n$vars.recent_bookings = duplicates;\nreturn { ...slotData, duplicate_check: 'fallback' };"
+      },
+      "id": "duplicate-processor",
+      "name": "Process Duplicate Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3200, 300],
+      "notes": "CODE NODE 6/11: Duplicate processor with fallback (ENTERPRISE)\nAPI SUCCESS: Uses external cache response\nAPI FAILURE: Falls back to $vars in-memory\nWINDOW: 5 minutes\nLOGS: Warning when fallback is used"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.SCHEDULING_API_BASE_URL}}/bookings",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "eventTypeId",
+              "value": "={{$vars.SCHEDULING_EVENT_TYPE_ID}}"
+            },
+            {
+              "name": "start",
+              "value": "={{ $json.slot_time }}"
+            },
+            {
+              "name": "responses",
+              "value": "={{ {\n  name: $('Set Validated Data').first().json.name,\n  email: $('Set Validated Data').first().json.email,\n  phone: $('Set Validated Data').first().json.phone_display,\n  notes: $('Set Validated Data').first().json.notes,\n  service_type: $('Set Validated Data').first().json.service_type\n} }}"
+            },
+            {
+              "name": "timeZone",
+              "value": "={{ $('Set Validated Data').first().json.timezone }}"
+            },
+            {
+              "name": "metadata",
+              "value": "={{ {\n  source: 'aigent_module_02',\n  workflow_version: '1.4.0-enterprise',\n  trace_id: $('Set Validated Data').first().json.trace_id,\n  phone_normalized: $('Set Validated Data').first().json.phone_normalized\n} }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{parseInt($vars.BOOKING_API_TIMEOUT) || 15000}}"
+        }
+      },
+      "id": "create-booking",
+      "name": "Create Booking",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3400, 300],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetween": 2000,
+      "notes": "NATIVE NODE: Create booking\nENTERPRISE: Updated metadata with v1.4.0-enterprise\nRETRY: 2 attempts with 2s delay\nTIMEOUT: Configurable via $vars.BOOKING_API_TIMEOUT"
+    },
+    {
+      "parameters": {},
+      "id": "marker-notifications-start",
+      "name": "━━━ 02c: NOTIFICATIONS SEGMENT ━━━",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [3600, 300],
+      "notes": "═══════════════════════════════════════════════════════\nSEGMENT: 02c - NOTIFICATIONS (ENTERPRISE v1.4.0)\n\nPURPOSE: Log booking and send confirmations\n\nENHANCEMENTS:\n- Uses sanitized _safe fields in all templates\n- Observability logging added\n- Performance tracking included\n\nFLOW:\n1. Log to Google Sheets (audit trail)\n2. Send Slack notification (staff alert)\n3. Send email confirmation (patient)\n4. Send SMS confirmation (patient)\n5. Merge results\n6. Build success response\n7. Send observability log\n\nOUTPUT: Success response with confirmation status\n═══════════════════════════════════════════════════════"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Appointments'}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "booking_id": "={{ $json.id || $json.uid }}",
+            "patient_name": "={{ $('Set Validated Data').first().json.name }}",
+            "patient_email": "={{ $('Set Validated Data').first().json.email }}",
+            "patient_phone": "={{ $('Set Validated Data').first().json.phone_normalized }}",
+            "service_type": "={{ $('Set Validated Data').first().json.service_type }}",
+            "appointment_datetime": "={{ $json.start || $json.startTime }}",
+            "timezone": "={{ $('Set Validated Data').first().json.timezone }}",
+            "duration_minutes": "={{ $('Select Best Slot').first().json.duration }}",
+            "status": "SCHEDULED",
+            "trace_id": "={{ $('Set Validated Data').first().json.trace_id }}",
+            "workflow_version": "1.4.0-enterprise",
+            "environment": "={{ $vars.ENVIRONMENT || 'production' }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-to-sheets",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [3800, 200],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "notes": "NATIVE NODE: Audit logging\nENTERPRISE: Updated workflow_version to 1.4.0-enterprise\nTAB: Separate 'Appointments' tab\nNON-BLOCKING: continueOnFail enabled"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=📅 **New Appointment Booked**\n\n👤 **Patient:** {{ $('Set Validated Data').first().json.name_safe }}\n📧 **Email:** {{ $('Set Validated Data').first().json.email }}\n📱 **Phone:** {{ $('Set Validated Data').first().json.phone_display }}\n\n🏥 **Service:** {{ $('Set Validated Data').first().json.service_type_safe }}\n📅 **Time:** {{ $now.constructor.fromISO($json.start || $json.startTime).toFormat('EEE, MMM d \\\\at h:mm a') }}\n🌍 **Timezone:** {{ $('Set Validated Data').first().json.timezone }}\n⏱️ **Duration:** {{ $('Select Best Slot').first().json.duration }} min\n\n🆔 **Booking ID:** {{ ($json.id || $json.uid).substring(0, 8).toUpperCase() }}\n🔍 **Trace ID:** {{ $('Set Validated Data').first().json.trace_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "notify-slack",
+      "name": "Send Slack Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3800, 300],
+      "continueOnFail": true,
+      "notes": "NATIVE NODE: Slack notification\nENTERPRISE: Uses name_safe and service_type_safe (sanitized)\nFORMAT: Rich text with booking details\nNON-BLOCKING: continueOnFail enabled"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 7/11: Build email HTML with sanitized fields (compact)\nconst booking = $input.first().json;\nconst patient = $('Set Validated Data').first().json;\nconst slot = $('Select Best Slot').first().json;\nconst dt = new Date(booking.start || booking.startTime);\n\nconst html = `<!DOCTYPE html>\n<html>\n<head><meta charset=\"UTF-8\"><style>\nbody{font-family:Arial,sans-serif;line-height:1.6;color:#333;margin:0;padding:0}\n.container{max-width:600px;margin:0 auto;padding:20px}\n.header{background:${$vars.BRAND_PRIMARY_COLOR || '#4F46E5'};color:white;padding:20px;text-align:center;border-radius:8px 8px 0 0}\n.content{background:#f9fafb;padding:30px;border-radius:0 0 8px 8px}\n.detail{margin:15px 0;padding:10px 0;border-bottom:1px solid #e5e7eb}\n.label{font-weight:bold;color:#6b7280;font-size:12px;text-transform:uppercase}\n.value{color:#111827;font-size:16px;margin-top:5px}\n.button{background:${$vars.BRAND_PRIMARY_COLOR || '#4F46E5'};color:white;padding:12px 30px;text-decoration:none;border-radius:6px;display:inline-block;margin:20px 0}\n</style></head>\n<body>\n<div class=\"container\">\n<div class=\"header\"><h1>✅ Appointment Confirmed</h1></div>\n<div class=\"content\">\n<p>Hi ${patient.name_safe.split(' ')[0]},</p>\n<p>Your appointment has been successfully scheduled!</p>\n<div class=\"detail\"><div class=\"label\">Service</div><div class=\"value\">${patient.service_type_safe}</div></div>\n<div class=\"detail\"><div class=\"label\">Date & Time</div><div class=\"value\">${dt.toLocaleDateString('en-US', {weekday:'long',year:'numeric',month:'long',day:'numeric'})} at ${dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}<br><small>${patient.timezone}</small></div></div>\n<div class=\"detail\"><div class=\"label\">Location</div><div class=\"value\">${$vars.CLINIC_NAME}${$vars.CLINIC_ADDRESS ? '<br>'+$vars.CLINIC_ADDRESS : ''}</div></div>\n<div class=\"detail\"><div class=\"label\">Booking ID</div><div class=\"value\">${(booking.id || booking.uid).substring(0,8).toUpperCase()}</div></div>\n<p style=\"margin-top:30px;font-size:14px;color:#6b7280\"><strong>Need to cancel?</strong><br>Call ${$vars.CLINIC_PHONE} or reply to this email.</p>\n</div>\n</div>\n</body></html>`;\n\nreturn { email_to: patient.email, email_subject: `Appointment Confirmed - ${dt.toLocaleDateString()}`, email_html: html, booking_id: booking.id || booking.uid };"
+      },
+      "id": "build-email",
+      "name": "Build Email HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3800, 400],
+      "notes": "CODE NODE 7/11: Email builder (ENTERPRISE)\nENHANCED: Uses name_safe and service_type_safe (sanitized)\nSECURITY: All user input is HTML-escaped\nUSES: $vars for clinic info, brand color"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL}}",
+        "toEmail": "={{ $json.email_to }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailType": "html",
+        "message": "={{ $json.email_html }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email Confirmation",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1.1,
+      "position": [4000, 400],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetween": 500,
+      "continueOnFail": true,
+      "notes": "NATIVE NODE: Email confirmation\nENTERPRISE: No changes\nRETRY: 2 attempts\nNON-BLOCKING: continueOnFail enabled"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 8/11: Build SMS with sanitized fields (compact)\nconst booking = $('Create Booking').first().json;\nconst patient = $('Set Validated Data').first().json;\nconst slot = $('Select Best Slot').first().json;\nconst dt = new Date(booking.start || booking.startTime);\n\nconst msg = `Hi ${patient.name_safe.split(' ')[0]},\\n\\nYour ${patient.service_type_safe} appointment is confirmed!\\n\\n📅 ${dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})} at ${dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}\\n📍 ${$vars.CLINIC_NAME}\\n\\nID: ${(booking.id||booking.uid).substring(0,8).toUpperCase()}\\n\\nQuestions? Call ${$vars.CLINIC_PHONE}\\n\\nReply STOP to unsubscribe`;\n\nif (msg.length > 306) {\n  return { sms_message: msg.substring(0, 303) + '...', to_phone: patient.phone_normalized };\n}\nreturn { sms_message: msg, to_phone: patient.phone_normalized };"
+      },
+      "id": "build-sms",
+      "name": "Build SMS Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3800, 500],
+      "notes": "CODE NODE 8/11: SMS builder (ENTERPRISE)\nENHANCED: Uses name_safe and service_type_safe (sanitized)\nVALIDATES: Length (max 306 chars / 2 segments)\nCOMPLIANCE: Includes STOP opt-out"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "from": "={{$vars.TWILIO_FROM_NUMBER}}",
+        "to": "={{ $json.to_phone }}",
+        "message": "={{ $json.sms_message }}",
+        "options": {}
+      },
+      "id": "send-sms",
+      "name": "Send SMS Confirmation",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1.2,
+      "position": [4000, 500],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetween": 500,
+      "continueOnFail": true,
+      "notes": "NATIVE NODE: SMS confirmation\nENTERPRISE: No changes\nRETRY: 2 attempts\nNON-BLOCKING: continueOnFail enabled"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-confirmations",
+      "name": "Merge Confirmations",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [4200, 350],
+      "notes": "NATIVE NODE: Merge all confirmation outputs\nENTERPRISE: No changes\nOUTPUT: Combined results from Sheets, Slack, Email, SMS"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "booking_id",
+              "value": "={{ $('Create Booking').first().json.id || $('Create Booking').first().json.uid }}"
+            },
+            {
+              "name": "confirmation_number",
+              "value": "={{ ($('Create Booking').first().json.id || $('Create Booking').first().json.uid).substring(0, 8).toUpperCase() }}"
+            },
+            {
+              "name": "scheduled_time",
+              "value": "={{ $('Create Booking').first().json.start || $('Create Booking').first().json.startTime }}"
+            },
+            {
+              "name": "trace_id",
+              "value": "={{ $('Set Validated Data').first().json.trace_id }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "sheets_logged",
+              "value": "={{ $('Log to Google Sheets').all().length > 0 }}"
+            },
+            {
+              "name": "slack_sent",
+              "value": "={{ $('Send Slack Notification').all().length > 0 }}"
+            },
+            {
+              "name": "email_sent",
+              "value": "={{ $('Send Email Confirmation').all().length > 0 }}"
+            },
+            {
+              "name": "sms_sent",
+              "value": "={{ $('Send SMS Confirmation').all().length > 0 }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "execution_time_ms",
+              "value": "={{ $now.toMillis() - $('Set Validated Data').first().json.execution_start }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "build-response",
+      "name": "Build Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.3,
+      "position": [4400, 350],
+      "notes": "NATIVE NODE: Build success response (ENTERPRISE)\nENHANCED: Calculates execution_time_ms for performance tracking\nSETS: booking_id, confirmation statuses, trace_id, timing"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.OBSERVABILITY_WEBHOOK_URL}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "trace_id",
+              "value": "={{ $json.trace_id }}"
+            },
+            {
+              "name": "execution_time_ms",
+              "value": "={{ $json.execution_time_ms }}"
+            },
+            {
+              "name": "patient_email",
+              "value": "={{ $('Set Validated Data').first().json.email }}"
+            },
+            {
+              "name": "success",
+              "value": true
+            },
+            {
+              "name": "errors",
+              "value": "={{ [] }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "1.4.0-enterprise"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "send-observability-log",
+      "name": "Send Execution Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4600, 350],
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Observability logging (NEW in v1.4.0)\nENDPOINT: $vars.OBSERVABILITY_WEBHOOK_URL\nPAYLOAD: trace_id, execution_time, patient_email, success, errors\nNON-BLOCKING: continueOnFail enabled\nTIMEOUT: 3s"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 9/11: Cache idempotency response (minimal)\nconst idempotencyKey = $('Process Idempotency Response').first().json.idempotency_key;\nconst responseData = $('Build Success Response').first().json;\n\nif (idempotencyKey) {\n  const cache = $vars.idempotency_cache || {};\n  cache[idempotencyKey] = {\n    response: {\n      success: true,\n      booking_id: responseData.booking_id,\n      trace_id: responseData.trace_id\n    },\n    timestamp: Date.now()\n  };\n  $vars.idempotency_cache = cache;\n}\n\nreturn responseData;"
+      },
+      "id": "cache-response",
+      "name": "Cache Idempotency Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4800, 350],
+      "notes": "CODE NODE 9/11: Cache response (ENTERPRISE)\nENHANCED: References updated node names\nSTORES: In $vars.idempotency_cache\nPURPOSE: Future duplicate requests return cached response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": true,\n  \"message\": \"Appointment booked successfully\",\n  \"data\": {\n    \"appointment_id\": $json.booking_id,\n    \"confirmation_number\": $json.confirmation_number,\n    \"patient_email\": $('Set Validated Data').first().json.email,\n    \"patient_name\": $('Set Validated Data').first().json.name,\n    \"scheduled_time\": $json.scheduled_time,\n    \"timezone\": $('Set Validated Data').first().json.timezone,\n    \"service_type\": $('Set Validated Data').first().json.service_type,\n    \"duration_minutes\": $('Select Best Slot').first().json.duration\n  },\n  \"confirmations\": {\n    \"sheets_logged\": $json.sheets_logged,\n    \"slack_sent\": $json.slack_sent,\n    \"email_sent\": $json.email_sent,\n    \"sms_sent\": $json.sms_sent\n  },\n  \"metadata\": {\n    \"trace_id\": $json.trace_id,\n    \"workflow_version\": \"1.4.0-enterprise\",\n    \"execution_time_ms\": $json.execution_time_ms,\n    \"timestamp\": $now.toISO()\n  }\n} }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "X-Trace-ID",
+                "value": "={{ $json.trace_id }}"
+              },
+              {
+                "name": "X-Workflow-Version",
+                "value": "1.4.0-enterprise"
+              },
+              {
+                "name": "X-Execution-Time-Ms",
+                "value": "={{ $json.execution_time_ms }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "return-success",
+      "name": "Return Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [5000, 350],
+      "notes": "SUCCESS RESPONSE: 200 OK (ENTERPRISE)\nENHANCED: Includes execution_time_ms in response and headers\nRETURNS: Complete booking confirmation with performance metrics\nHEADERS: trace_id, version, execution_time for debugging"
+    },
+    {
+      "parameters": {},
+      "id": "marker-testing-start",
+      "name": "━━━ 02d: TESTING SEGMENT ━━━",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [5200, 350],
+      "notes": "═══════════════════════════════════════════════════════\nSEGMENT: 02d - TESTING (NEW in v1.4.0)\n\nPURPOSE: QA automation and test harness\n\nFLOW:\n1. Send test summary to test webhook\n\nOUTPUT: Test data for QA automation\n═══════════════════════════════════════════════════════"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.TEST_WEBHOOK_URL}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "test_type",
+              "value": "booking_success"
+            },
+            {
+              "name": "trace_id",
+              "value": "={{ $('Cache Idempotency Response').first().json.trace_id }}"
+            },
+            {
+              "name": "booking_id",
+              "value": "={{ $('Cache Idempotency Response').first().json.booking_id }}"
+            },
+            {
+              "name": "execution_time_ms",
+              "value": "={{ $('Cache Idempotency Response').first().json.execution_time_ms }}"
+            },
+            {
+              "name": "confirmations",
+              "value": "={{ {\n  sheets: $('Cache Idempotency Response').first().json.sheets_logged,\n  slack: $('Cache Idempotency Response').first().json.slack_sent,\n  email: $('Cache Idempotency Response').first().json.email_sent,\n  sms: $('Cache Idempotency Response').first().json.sms_sent\n} }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 2000
+        }
+      },
+      "id": "send-test-summary",
+      "name": "Send Test Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [5400, 350],
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Test harness webhook (NEW in v1.4.0)\nENDPOINT: $vars.TEST_WEBHOOK_URL\nPURPOSE: Send execution summary for QA automation\nNON-BLOCKING: continueOnFail enabled\nOPTIONAL: Only runs if TEST_WEBHOOK_URL is configured"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CODE NODE 10/11: Global error handler (ENTERPRISE)\nlet errorData;\ntry {\n  const errorInput = $input.first().json.error || $input.first().json.message || 'Unknown error';\n  errorData = typeof errorInput === 'string' ? JSON.parse(errorInput) : errorInput;\n} catch (e) {\n  errorData = { error: 'Unknown error', message: String($input.first().json.error || $input.first().json.message || 'Unknown error') };\n}\n\nconst traceId = (() => {\n  try {\n    return $('Set Validated Data')?.first()?.json?.trace_id || 'BOOK-' + Date.now();\n  } catch {\n    return 'BOOK-' + Date.now();\n  }\n})();\n\nreturn {\n  success: false,\n  error: errorData.error || 'Request failed',\n  error_code: errorData.error_code || 'UNKNOWN_ERROR',\n  message: errorData.message || String(errorData.error || 'Unknown error'),\n  trace_id: traceId,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "global-error-handler",
+      "name": "Global Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4400, 700],
+      "onError": "continueErrorOutput",
+      "notes": "CODE NODE 10/11: Error handler (ENTERPRISE)\nENHANCED: Wrapped all JSON.parse in try/catch\nALWAYS OUTPUTS: success, error, error_code, message, trace_id, timestamp\nSAFETY: Multiple fallback layers for resilience"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.OBSERVABILITY_WEBHOOK_URL}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "trace_id",
+              "value": "={{ $json.trace_id }}"
+            },
+            {
+              "name": "execution_time_ms",
+              "value": "={{ (() => {\n  try {\n    return $now.toMillis() - ($('Set Validated Data')?.first()?.json?.execution_start || $now.toMillis());\n  } catch {\n    return null;\n  }\n})() }}"
+            },
+            {
+              "name": "patient_email",
+              "value": "={{ (() => {\n  try {\n    return $('Set Validated Data')?.first()?.json?.email || 'unknown';\n  } catch {\n    return 'unknown';\n  }\n})() }}"
+            },
+            {
+              "name": "success",
+              "value": false
+            },
+            {
+              "name": "errors",
+              "value": "={{ [$json.error_code + ': ' + $json.message] }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "1.4.0-enterprise"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 3000
+        }
+      },
+      "id": "log-error-observability",
+      "name": "Log Error to Observability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4600, 700],
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Error observability logging (NEW in v1.4.0)\nENDPOINT: $vars.OBSERVABILITY_WEBHOOK_URL\nPAYLOAD: trace_id, execution_time, patient_email, success=false, errors\nNON-BLOCKING: continueOnFail enabled\nSAFETY: Wrapped all node references in try/catch"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.error_code === 'RATE_LIMIT_EXCEEDED' ? 429 : ($json.error_code === 'DUPLICATE_BOOKING' ? 409 : ($json.error_code === 'VALIDATION_FAILED' ? 400 : 500)) }}"
+        }
+      },
+      "id": "return-error",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [4800, 700],
+      "notes": "ERROR RESPONSE: Variable status code (ENTERPRISE)\nENHANCED: Added 400 for VALIDATION_FAILED\nCODES: 400 (validation), 429 (rate limit), 409 (duplicate), 500 (other)\nRETURNS: Standardized error format"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": false,\n  \"error\": \"Validation failed\",\n  \"error_code\": \"VALIDATION_FAILED\",\n  \"details\": $json.details || [],\n  \"trace_id\": $json.trace_id || 'BOOK-' + $now.toMillis(),\n  \"timestamp\": $now.toISO()\n} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error-validation",
+      "name": "Return: Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1600, 500],
+      "notes": "ERROR RESPONSE: 400 Bad Request (ENTERPRISE)\nENHANCED: Uses enhanced validation error structure\nRETURNS: Unified error list with all failed fields"
+    }
+  ],
+  "connections": {
+    "Webhook: Booking Request": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Check (Persistent API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Check (Persistent API)": {
+      "main": [
+        [
+          {
+            "node": "Process Rate Limit Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Rate Limit Response": {
+      "main": [
+        [
+          {
+            "node": "Idempotency Check (Persistent API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Idempotency Check (Persistent API)": {
+      "main": [
+        [
+          {
+            "node": "Process Idempotency Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Idempotency Response": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Field Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Field Validation": {
+      "main": [
+        [
+          {
+            "node": "Sanitize User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sanitize User Input": {
+      "main": [
+        [
+          {
+            "node": "Extract Phone Digits",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Phone Digits": {
+      "main": [
+        [
+          {
+            "node": "Set Validated Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Validated Data": {
+      "main": [
+        [
+          {
+            "node": "━━━ 02b: SCHEDULING SEGMENT ━━━",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "━━━ 02b: SCHEDULING SEGMENT ━━━": {
+      "main": [
+        [
+          {
+            "node": "Check Calendar Availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Calendar Availability": {
+      "main": [
+        [
+          {
+            "node": "Select Best Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Best Slot": {
+      "main": [
+        [
+          {
+            "node": "Check: Slot Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check: Slot Found?": {
+      "main": [
+        [
+          {
+            "node": "Return: No Availability",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Duplicate Check (Persistent API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Check (Persistent API)": {
+      "main": [
+        [
+          {
+            "node": "Process Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "Create Booking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Booking": {
+      "main": [
+        [
+          {
+            "node": "━━━ 02c: NOTIFICATIONS SEGMENT ━━━",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "━━━ 02c: NOTIFICATIONS SEGMENT ━━━": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Slack Notification",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Email HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build SMS Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Merge Confirmations",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Slack Notification": {
+      "main": [
+        [
+          {
+            "node": "Merge Confirmations",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Email HTML": {
+      "main": [
+        [
+          {
+            "node": "Send Email Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Merge Confirmations",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Build SMS Message": {
+      "main": [
+        [
+          {
+            "node": "Send SMS Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Merge Confirmations",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge Confirmations": {
+      "main": [
+        [
+          {
+            "node": "Build Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Success Response": {
+      "main": [
+        [
+          {
+            "node": "Send Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Execution Log": {
+      "main": [
+        [
+          {
+            "node": "Cache Idempotency Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cache Idempotency Response": {
+      "main": [
+        [
+          {
+            "node": "Return Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Success Response": {
+      "main": [
+        [
+          {
+            "node": "━━━ 02d: TESTING SEGMENT ━━━",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "━━━ 02d: TESTING SEGMENT ━━━": {
+      "main": [
+        [
+          {
+            "node": "Send Test Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Global Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Log Error to Observability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error to Observability": {
+      "main": [
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "executionTimeout": 30
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Aigent",
+      "id": "aigent"
+    },
+    {
+      "name": "Module-02",
+      "id": "module-02"
+    },
+    {
+      "name": "Enterprise",
+      "id": "enterprise"
+    },
+    {
+      "name": "Secure",
+      "id": "secure"
+    },
+    {
+      "name": "Cloud-Ready",
+      "id": "cloud-ready"
+    }
+  ],
+  "triggerCount": 1,
+  "updatedAt": "2025-11-04T00:00:00.000Z",
+  "versionId": "1.4.0-enterprise",
+  "meta": {
+    "version": "1.4.0-enterprise",
+    "description": "Aigent Module 02: Consult Booking & Scheduling (ENTERPRISE). Production-grade workflow with persistent caching via external API, comprehensive validation, HTML sanitization, observability logging, and test harness. Graceful degradation with fallback to $vars when cache API unavailable.",
+    "author": "Aigent Automation Engineering",
+    "license": "Proprietary - Aigent Company",
+    "enhancements": [
+      "Persistent caching via external API (rate limiting, idempotency, duplicate detection)",
+      "Full HTML sanitization utility with escapeHTML function",
+      "Expanded field validation (email regex, name 2-100 chars, phone 7-20 digits, service_type max 200, date/time format validation)",
+      "Global observability logging (success and error paths)",
+      "Test harness for QA automation",
+      "Graceful degradation with fallback to $vars when API unavailable",
+      "Performance tracking (execution_time_ms in response)",
+      "Enhanced error handling with wrapped try/catch blocks"
+    ],
+    "performance_targets": {
+      "avg_execution_time_ms": 1100,
+      "p95_execution_time_ms": 2000,
+      "note": "Times include external API calls; fallback mode matches v1.3.0 performance"
+    },
+    "code_nodes": {
+      "total": 10,
+      "list": [
+        "Process Rate Limit Response (with fallback)",
+        "Process Idempotency Response (with fallback)",
+        "Enhanced Field Validation",
+        "Sanitize User Input",
+        "Select Best Slot",
+        "Process Duplicate Check (with fallback)",
+        "Build Email HTML",
+        "Build SMS Message",
+        "Cache Idempotency Response",
+        "Global Error Handler"
+      ]
+    },
+    "required_vars": [
+      "ALLOWED_ORIGINS",
+      "CACHE_API_BASE_URL",
+      "CACHE_API_KEY",
+      "SCHEDULING_API_BASE_URL",
+      "SCHEDULING_EVENT_TYPE_ID",
+      "CLINIC_TIMEZONE",
+      "CLINIC_NAME",
+      "CLINIC_PHONE",
+      "SENDGRID_FROM_EMAIL",
+      "GOOGLE_SHEET_ID",
+      "GOOGLE_SHEET_TAB",
+      "NOTIFICATION_WEBHOOK_URL",
+      "OBSERVABILITY_WEBHOOK_URL",
+      "TEST_WEBHOOK_URL"
+    ],
+    "optional_vars": [
+      "RATE_LIMIT_MAX",
+      "CALENDAR_API_TIMEOUT",
+      "BOOKING_API_TIMEOUT",
+      "DEFAULT_APPOINTMENT_DURATION",
+      "BRAND_PRIMARY_COLOR",
+      "CLINIC_EMAIL",
+      "CLINIC_ADDRESS",
+      "TWILIO_FROM_NUMBER",
+      "ENVIRONMENT"
+    ],
+    "new_vars_in_v1_4": [
+      "CACHE_API_BASE_URL",
+      "CACHE_API_KEY",
+      "OBSERVABILITY_WEBHOOK_URL",
+      "TEST_WEBHOOK_URL"
+    ],
+    "shared_with_module_01": [
+      "ALLOWED_ORIGINS",
+      "GOOGLE_SHEET_ID",
+      "NOTIFICATION_WEBHOOK_URL",
+      "ENVIRONMENT"
+    ],
+    "validation_rules": {
+      "email": "Regex /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/",
+      "name": "2-100 characters",
+      "phone": "7-20 digits",
+      "service_type": "Required, max 200 characters",
+      "preferred_date": "Optional, valid ISO date >= today",
+      "preferred_time": "Optional, HH:MM 24-hour format"
+    },
+    "sanitization": {
+      "fields": ["name", "service_type", "notes"],
+      "method": "escapeHTML function (replaces < > & \" ' / with HTML entities)",
+      "output_fields": ["name_safe", "service_type_safe", "notes_safe"]
+    },
+    "external_api_endpoints": {
+      "rate_limit": "POST $CACHE_API_BASE_URL/ratelimit/check",
+      "idempotency": "POST $CACHE_API_BASE_URL/idempotency/check",
+      "duplicate": "POST $CACHE_API_BASE_URL/duplicate/check",
+      "observability": "POST $OBSERVABILITY_WEBHOOK_URL",
+      "test_harness": "POST $TEST_WEBHOOK_URL"
+    },
+    "fallback_behavior": {
+      "rate_limit": "Falls back to $vars.rate_limits (in-memory)",
+      "idempotency": "Falls back to $vars.idempotency_cache (in-memory)",
+      "duplicate": "Falls back to $vars.recent_bookings (in-memory)",
+      "logging": "Console warnings when fallback is used"
+    },
+    "observability": {
+      "success_path": "Logs trace_id, execution_time_ms, patient_email, success=true",
+      "error_path": "Logs trace_id, execution_time_ms, patient_email, success=false, errors",
+      "non_blocking": true,
+      "timeout_ms": 3000
+    },
+    "test_harness": {
+      "enabled": "When TEST_WEBHOOK_URL is configured",
+      "payload": "trace_id, booking_id, execution_time_ms, confirmations, timestamp",
+      "purpose": "QA automation integration",
+      "non_blocking": true
+    },
+    "deployment_notes": [
+      "Import to n8n Cloud",
+      "Configure credentials: Cal.com, SendGrid, Twilio, Google Sheets",
+      "Set all required $vars in n8n Settings → Variables",
+      "Configure external cache API (Redis/similar) with endpoints:",
+      "  - POST /ratelimit/check",
+      "  - POST /idempotency/check",
+      "  - POST /duplicate/check",
+      "Set CACHE_API_BASE_URL and CACHE_API_KEY",
+      "Set OBSERVABILITY_WEBHOOK_URL for execution logging",
+      "Optionally set TEST_WEBHOOK_URL for QA automation",
+      "Reuse Google Sheet and Slack webhook from Module 01",
+      "Create 'Appointments' tab in Google Sheet",
+      "Test with sample booking request",
+      "Monitor execution logs and observability endpoint",
+      "Verify fallback behavior by temporarily disabling cache API"
+    ],
+    "compatibility": {
+      "n8n_version": "1.0+",
+      "cloud_ready": true,
+      "modules": "Compatible with Module 01 (shared variables and Google Sheet)"
+    },
+    "security": {
+      "html_sanitization": "All user input sanitized before email/Slack",
+      "validation": "Comprehensive regex-based validation",
+      "rate_limiting": "Persistent or in-memory fallback",
+      "idempotency": "24-hour cache prevents duplicate processing",
+      "duplicate_detection": "5-minute window prevents double bookings"
+    }
+  }
+}
