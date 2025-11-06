@@ -40,7 +40,6 @@
         "conditions": {
           "options": {
             "caseSensitive": false,
-            "leftValue": "",
             "typeValidation": "loose"
           },
           "conditions": [
