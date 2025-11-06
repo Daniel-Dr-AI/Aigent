@@ -40,7 +40,6 @@
         "conditions": {
           "options": {
             "caseSensitive": false,
-            "leftValue": "",
             "typeValidation": "loose"
           },
           "conditions": [
@@ -73,7 +72,7 @@
             },
             {
               "id": "name-length",
-              "leftValue": "={{ $json.body.name ? $json.body.name.length : 0 }}",
+              "leftValue": "={{ $json.body.name.length }}",
               "rightValue": "100",
               "operator": {
                 "type": "number",
@@ -82,7 +81,7 @@
             },
             {
               "id": "email-length",
-              "leftValue": "={{ $json.body.email ? $json.body.email.length : 0 }}",
+              "leftValue": "={{ $json.body.email.length }}",
               "rightValue": "255",
               "operator": {
                 "type": "number",
@@ -91,7 +90,7 @@
             },
             {
               "id": "phone-length",
-              "leftValue": "={{ $json.body.phone ? $json.body.phone.length : 0 }}",
+              "leftValue": "={{ $json.body.phone.length }}",
               "rightValue": "20",
               "operator": {
                 "type": "number",
