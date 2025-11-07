@@ -1,0 +1,224 @@
+{
+  "name": "Aigent_Module_09_Core_V2_Compliance_Audit",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "log-event",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {body: $input.item.json.body || {}, trace_id: `AUDIT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
+      },
+      "id": "metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "event",
+              "leftValue": "={{ $json.body.event_type }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "user",
+              "leftValue": "={{ $json.body.user_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "action",
+              "leftValue": "={{ $json.body.action }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        }
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'AuditLog'}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $('Add Metadata').first().json.timestamp }}",
+            "audit_id": "={{ $('Add Metadata').first().json.trace_id }}",
+            "event_type": "={{ $('Add Metadata').first().json.body.event_type }}",
+            "user_id": "={{ $('Add Metadata').first().json.body.user_id }}",
+            "resource_id": "={{ $('Add Metadata').first().json.body.resource_id || 'N/A' }}",
+            "action": "={{ $('Add Metadata').first().json.body.action }}",
+            "details": "={{ $('Add Metadata').first().json.body.details || '' }}"
+          }
+        }
+      },
+      "id": "log",
+      "name": "Append to Audit Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: true, audit_id: $('Add Metadata').first().json.trace_id, timestamp: $('Add Metadata').first().json.timestamp} }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: 'Provide event_type, user_id, and action'} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Add Metadata"
+          }
+        ]
+      ]
+    },
+    "Add Metadata": {
+      "main": [
+        [
+          {
+            "node": "Validate"
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Append to Audit Log"
+          }
+        ],
+        [
+          {
+            "node": "Return Error"
+          }
+        ]
+      ]
+    },
+    "Append to Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Return Success"
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "meta": {
+    "version": "core-1.1.0",
+    "description": "Module 09 CORE: Simple audit logging",
+    "performance": {
+      "avg_execution_time_ms": 300,
+      "node_count": 6
+    },
+    "v2_improvements": [
+      "CRITICAL: Added missing settings and tags keys",
+      "Fixed CORS",
+      "Improved trace_id"
+    ]
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-09",
+      "name": "Module-09"
+    },
+    {
+      "id": "smb-ready",
+      "name": "SMB-Ready"
+    }
+  ]
+}
