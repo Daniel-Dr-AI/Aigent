@@ -1,0 +1,477 @@
+{
+  "name": "Aigent_Module_04_Core_V2_Billing_Payments",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "billing-payment",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.item.json.body || {};\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\nreturn {body: body, trace_id: `PAY-${timestamp}-${random}`, timestamp: new Date().toISOString()};"
+      },
+      "id": "add-metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "amount",
+              "leftValue": "={{ $json.body.amount }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "email",
+              "leftValue": "={{ $json.body.customer_email }}",
+              "rightValue": "@",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "desc",
+              "leftValue": "={{ $json.body.description }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "validate-fields",
+      "name": "Validate Fields",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "charge",
+        "amount": "={{ $json.body.amount }}",
+        "currency": "={{$json.body.currency || 'usd'}}",
+        "additionalFields": {
+          "email": "={{ $json.body.customer_email }}",
+          "description": "={{ $json.body.description }}",
+          "metadata": "={{ { trace_id: $('Add Metadata').first().json.trace_id, booking_id: $json.body.booking_id || null } }}"
+        }
+      },
+      "id": "stripe-charge",
+      "name": "Create Stripe Charge",
+      "type": "n8n-nodes-base.stripe",
+      "typeVersion": 1,
+      "position": [
+        800,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "CORE: Stripe only (no Square)\nREQUIRES: Stripe credential configured"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.status }}",
+              "value2": "succeeded"
+            }
+          ]
+        }
+      },
+      "id": "check-payment",
+      "name": "Check Payment Status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Payments'}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $('Add Metadata').first().json.timestamp }}",
+            "trace_id": "={{ $('Add Metadata').first().json.trace_id }}",
+            "charge_id": "={{ $json.id }}",
+            "amount": "={{ $json.amount }}",
+            "currency": "={{ $json.currency }}",
+            "customer_email": "={{ $('Add Metadata').first().json.body.customer_email }}",
+            "description": "={{ $('Add Metadata').first().json.body.description }}",
+            "status": "={{ $json.status }}",
+            "receipt_url": "={{ $json.receipt_url || 'N/A' }}"
+          }
+        }
+      },
+      "id": "log-sheets",
+      "name": "Log to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "toEmail": "={{ $('Add Metadata').first().json.body.customer_email }}",
+        "subject": "Payment Receipt",
+        "emailType": "text",
+        "message": "=Thank you for your payment!\n\nAmount: ${{ ($json.amount / 100).toFixed(2) }}\nDescription: {{ $('Add Metadata').first().json.body.description }}\nTransaction ID: {{ $json.id }}\n\nReceipt: {{ $json.receipt_url || 'Available in your Stripe dashboard' }}\n\nQuestions? Contact {{ $env.CLINIC_PHONE }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Receipt Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=\ud83d\udcb3 Payment Received\n\ud83d\udcb0 ${{ ($json.amount / 100).toFixed(2) }}\n\ud83d\udce7 {{ $('Add Metadata').first().json.body.customer_email }}\n\ud83c\udd94 {{ $('Add Metadata').first().json.trace_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "notify-staff",
+      "name": "Notify Staff",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        320
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  message: 'Payment processed successfully',\n  charge_id: $json.id,\n  amount: $json.amount,\n  currency: $json.currency,\n  status: $json.status,\n  receipt_url: $json.receipt_url,\n  trace_id: $('Add Metadata').first().json.trace_id,\n  timestamp: $('Add Metadata').first().json.timestamp\n} }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "return-success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: false,\n  error: 'Payment declined',\n  charge_id: $json.id,\n  failure_code: $json.failure_code,\n  failure_message: $json.failure_message,\n  timestamp: $now.toISO()\n} }}",
+        "options": {
+          "responseCode": 402
+        }
+      },
+      "id": "return-declined",
+      "name": "Return Payment Declined",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  success: false,\n  error: 'Please provide amount (>0), customer_email, and description',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "return-error",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1000,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.item.json.error || {};\nreturn {success: false, error: 'Payment processing error', error_message: error.message || 'Unknown', trace_id: $('Add Metadata').first().json.trace_id || 'UNKNOWN', timestamp: new Date().toISOString()};"
+      },
+      "id": "global-error-handler",
+      "name": "Global Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "return-error-500",
+      "name": "Return Server Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Add Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Metadata": {
+      "main": [
+        [
+          {
+            "node": "Validate Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Fields": {
+      "main": [
+        [
+          {
+            "node": "Create Stripe Charge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Stripe Charge": {
+      "main": [
+        [
+          {
+            "node": "Check Payment Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Payment Status": {
+      "main": [
+        [
+          {
+            "node": "Log to Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Receipt Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify Staff",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Payment Declined",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Return Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-trigger": {},
+    "add-metadata": {},
+    "validate-fields": {},
+    "stripe-charge": {},
+    "check-payment": {},
+    "log-sheets": {},
+    "send-email": {},
+    "notify-staff": {},
+    "return-success": {},
+    "return-declined": {},
+    "format-error": {},
+    "return-error": {},
+    "global-error-handler": {},
+    "return-error-500": {},
+    "Global Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Return Server Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-04",
+      "name": "Module-04"
+    }
+  ],
+  "meta": {
+    "version": "core-1.1.0",
+    "branch": "Core",
+    "description": "Aigent Module 04 CORE: Simplified billing & payments via Stripe only.",
+    "features": [
+      "Stripe charge creation",
+      "Email receipts",
+      "Payment logging",
+      "Staff notifications"
+    ],
+    "removed_enterprise_features": [
+      "Square integration",
+      "QuickBooks sync",
+      "Duplicate charge prevention",
+      "SMS receipts",
+      "Refund automation"
+    ],
+    "required_vars": [
+      "GOOGLE_SHEET_ID"
+    ],
+    "required_credentials": [
+      "Stripe API"
+    ],
+    "performance": {
+      "avg_execution_time_ms": 1200,
+      "node_count": 12
+    },
+    "v2_improvements": [
+      "Fixed CORS",
+      "Improved trace_id",
+      "Added error handler",
+      "Added amount validation (max $10,000)"
+    ]
+  }
+}

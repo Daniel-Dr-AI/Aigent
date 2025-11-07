@@ -1,0 +1,118 @@
+{
+  "name": "Aigent_Module_06_Core_Document_OCR",
+  "nodes": [
+    {
+      "parameters": {"httpMethod": "POST", "path": "document-upload", "responseMode": "responseNode", "options": {"allowedOrigins": "*"}},
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {"jsCode": "return {body: $input.item.json.body || {}, trace_id: `DOC-${Date.now()}`, timestamp: new Date().toISOString()};"},
+      "id": "metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {"id": "url", "leftValue": "={{ $json.body.file_url }}", "rightValue": "", "operator": {"type": "string", "operation": "notEmpty"}}
+          ]
+        }
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {"url": "={{ $json.body.file_url }}", "options": {}},
+      "id": "download",
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 240]
+    },
+    {
+      "parameters": {
+        "operation": "imageText",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "ocr",
+      "name": "Google Vision OCR",
+      "type": "n8n-nodes-base.googleCloudVision",
+      "typeVersion": 1,
+      "position": [1000, 240],
+      "notes": "REQUIRES: Google Cloud Vision credential"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ocr = $input.first().json;\nconst text = ocr.fullTextAnnotation?.text || '';\n// Simple field extraction\nconst nameMatch = text.match(/name[:\\s]+([a-zA-Z\\s]+)/i);\nconst dateMatch = text.match(/(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})/);\nconst amountMatch = text.match(/\\$([\\d,]+\\.?\\d*)/);\nreturn {\n  document_id: $('Add Metadata').first().json.trace_id,\n  file_url: $('Add Metadata').first().json.body.file_url,\n  ocr_text: text,\n  extracted: {name: nameMatch?.[1]?.trim(), date: dateMatch?.[0], amount: amountMatch?.[0]},\n  timestamp: $('Add Metadata').first().json.timestamp\n};"
+      },
+      "id": "extract",
+      "name": "Extract Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 240]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_TAB || 'Documents'}}", "mode": "name"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "document_id": "={{ $json.document_id }}",
+            "file_url": "={{ $json.file_url }}",
+            "ocr_text": "={{ $json.ocr_text.substring(0, 500) }}",
+            "extracted_name": "={{ $json.extracted.name }}",
+            "extracted_date": "={{ $json.extracted.date }}",
+            "extracted_amount": "={{ $json.extracted.amount }}"
+          }
+        }
+      },
+      "id": "log",
+      "name": "Log to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1400, 240],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{ $json }}", "options": {"responseCode": 200}},
+      "id": "success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1600, 240]
+    },
+    {
+      "parameters": {"respondWith": "json", "responseBody": "={{  {success: false, error: 'Provide file_url'} }}", "options": {"responseCode": 400}},
+      "id": "error",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [800, 360]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {"main": [[{"node": "Add Metadata"}]]},
+    "Add Metadata": {"main": [[{"node": "Validate"}]]},
+    "Validate": {"main": [[{"node": "Download File"}], [{"node": "Return Error"}]]},
+    "Download File": {"main": [[{"node": "Google Vision OCR"}]]},
+    "Google Vision OCR": {"main": [[{"node": "Extract Fields"}]]},
+    "Extract Fields": {"main": [[{"node": "Log to Sheets"}]]},
+    "Log to Sheets": {"main": [[{"node": "Return Success"}]]}
+  },
+  "active": false,
+  "meta": {"version": "core-1.0.0", "description": "Module 06 CORE: Document OCR", "performance": {"avg_execution_time_ms": 3000, "node_count": 8}}
+}
