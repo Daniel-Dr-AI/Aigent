@@ -36,73 +36,33 @@
     },
     {
       "parameters": {
+        "jsCode": "// CORE V2: Pre-validation to prevent IF node .length expression bug\n// This node validates all fields and returns a validation result\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Required field checks with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length > 100) {\n  errors.push('name_length');\n}\n\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n} else if (body.email.length > 255) {\n  errors.push('email_length');\n}\n\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n}\n\nif (!body.service_type || typeof body.service_type !== 'string' || body.service_type.trim() === '') {\n  errors.push('service_type');\n} else if (!/^(Consultation|Therapy|Assessment|Follow-up|General)$/.test(body.service_type)) {\n  errors.push('service_type_invalid');\n}\n\n// Return validation result\nreturn {\n  body: body,\n  trace_id: $input.item.json.trace_id,\n  timestamp: $input.item.json.timestamp,\n  valid: errors.length === 0,\n  errors: errors\n};"
+      },
+      "id": "pre-validation",
+      "name": "Pre-Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "notes": "CORE V2: Pre-validation using Code node\nFIXES: n8n IF node .length expression serialization bug\nCHECKS: Required fields, length limits, email format, service type whitelist"
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
-            "typeValidation": "loose"
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
-              "id": "email",
-              "leftValue": "={{ $json.body.email }}",
-              "rightValue": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
+              "id": "valid-check",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
               "operator": {
-                "type": "string",
-                "operation": "regex"
-              }
-            },
-            {
-              "id": "name",
-              "leftValue": "={{ $json.body.name }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "phone",
-              "leftValue": "={{ $json.body.phone }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "service",
-              "leftValue": "={{ $json.body.service_type }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "name-length",
-              "leftValue": "={{ $json.body.name.length }}",
-              "rightValue": "100",
-              "operator": {
-                "type": "number",
-                "operation": "lessThanOrEqual"
-              }
-            },
-            {
-              "id": "email-length",
-              "leftValue": "={{ $json.body.email.length }}",
-              "rightValue": "255",
-              "operator": {
-                "type": "number",
-                "operation": "lessThanOrEqual"
-              }
-            },
-            {
-              "id": "service-whitelist",
-              "leftValue": "={{ $json.body.service_type }}",
-              "rightValue": "^(Consultation|Therapy|Assessment|Follow-up|General)$",
-              "operator": {
-                "type": "string",
-                "operation": "regex"
+                "type": "boolean",
+                "operation": "equals"
               }
             }
           ],
@@ -110,14 +70,14 @@
         }
       },
       "id": "validate-fields",
-      "name": "Validate Required Fields",
+      "name": "Check Validation",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        600,
+        800,
         300
       ],
-      "notes": "CORE V2: Enhanced validation with length limits and service type whitelist"
+      "notes": "CORE V2: Simple boolean check (no .length expressions)\nRELIABLE: No UI serialization issues"
     },
     {
       "parameters": {
@@ -128,7 +88,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        800,
+        1000,
         240
       ],
       "notes": "CORE: Basic normalization\nNO: Duplicate check, sanitization"
@@ -159,7 +119,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1000,
+        1200,
         240
       ],
       "retryOnFail": true,
@@ -175,7 +135,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
+        1400,
         240
       ],
       "notes": "CORE: First available slot\nNO: Preference matching, optimization"
@@ -196,7 +156,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1400,
+        1600,
         240
       ],
       "notes": "CORE: Simple error check"
@@ -251,7 +211,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1600,
+        1800,
         180
       ],
       "retryOnFail": true,
@@ -293,7 +253,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [
-        1800,
+        2000,
         100
       ],
       "retryOnFail": true,
@@ -323,7 +283,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1800,
+        2000,
         180
       ],
       "continueOnFail": true,
@@ -344,7 +304,7 @@
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
       "position": [
-        1800,
+        2000,
         260
       ],
       "retryOnFail": true,
@@ -366,7 +326,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2000,
+        2200,
         180
       ],
       "notes": "CORE: Simple success response\nNO: Performance metrics, detailed confirmations"
@@ -384,7 +344,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1600,
+        1800,
         340
       ],
       "notes": "CORE: 409 Conflict (no slots)"
@@ -398,7 +358,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        800,
+        1000,
         360
       ],
       "notes": "CORE: Generic validation error"
@@ -416,7 +376,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1000,
+        1200,
         360
       ],
       "notes": "CORE: 400 Bad Request"
@@ -430,7 +390,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2000,
+        2200,
         500
       ],
       "notes": "CORE V2: Global error handler"
@@ -448,7 +408,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2200,
+        2400,
         500
       ],
       "notes": "CORE V2: 500 error response"
@@ -470,14 +430,25 @@
       "main": [
         [
           {
-            "node": "Validate Required Fields",
+            "node": "Pre-Validation",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validate Required Fields": {
+    "Pre-Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation": {
       "main": [
         [
           {
@@ -585,6 +556,7 @@
     },
     "webhook-trigger": {},
     "add-metadata": {},
+    "pre-validation": {},
     "validate-fields": {},
     "normalize-data": {},
     "check-availability": {},

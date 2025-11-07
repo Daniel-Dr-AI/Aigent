@@ -100,57 +100,30 @@
     },
     {
       "parameters": {
+        "jsCode": "// ENTERPRISE V2: Pre-validation to prevent IF node .length expression bug\n// Enhanced validation with detailed error tracking\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Name validation with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length < 2) {\n  errors.push('name_min_length');\n}\n\n// Email validation with regex\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n}\n\n// Phone validation with digit count check\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n} else {\n  const phoneDigits = body.phone.replace(/\\D/g, '');\n  if (phoneDigits.length < 7) {\n    errors.push('phone_min_length');\n  }\n}\n\n// Return validation result\nreturn {\n  ...($input.item.json),\n  _validation: {\n    valid: errors.length === 0,\n    errors: errors,\n    validated_at: Date.now()\n  }\n};"
+      },
+      "id": "pre-validation",
+      "name": "Pre-Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 240],
+      "notes": "ENTERPRISE V2: Pre-validation using Code node\nFIXES: n8n IF node .length expression serialization bug\nCHECKS: Name (min 2 chars), email regex, phone (min 7 digits)\nNULL-SAFE: Proper type checking before accessing .length"
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
-            "leftValue": "",
-            "typeValidation": "loose"
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
-              "id": "name-check",
-              "leftValue": "={{ $json.body.name }}",
-              "rightValue": "",
+              "id": "valid-check",
+              "leftValue": "={{ $json._validation.valid }}",
+              "rightValue": true,
               "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            },
-            {
-              "id": "name-length",
-              "leftValue": "={{ $json.body.name?.length }}",
-              "rightValue": 2,
-              "operator": {
-                "type": "number",
-                "operation": "gte"
-              }
-            },
-            {
-              "id": "email-check",
-              "leftValue": "={{ $json.body.email }}",
-              "rightValue": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
-              "operator": {
-                "type": "string",
-                "operation": "regex"
-              }
-            },
-            {
-              "id": "phone-check",
-              "leftValue": "={{ $json.body.phone }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "phone-length",
-              "leftValue": "={{ ($json.body.phone || '').replace(/\\D/g, '').length }}",
-              "rightValue": 7,
-              "operator": {
-                "type": "number",
-                "operation": "gte"
+                "type": "boolean",
+                "operation": "equals"
               }
             }
           ],
@@ -159,11 +132,11 @@
         "options": {}
       },
       "id": "validation-check",
-      "name": "Enhanced Validation",
+      "name": "Check Validation",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1000, 240],
-      "notes": "ENTERPRISE: Strict validation\nRULES: Name 2+ chars, email regex, phone 7+ digits\nOUTPUT: Detailed field-level errors"
+      "position": [1200, 240],
+      "notes": "ENTERPRISE V2: Simple boolean check (no .length expressions)\nRELIABLE: No UI serialization issues\nROUTING: True = valid, False = errors"
     },
     {
       "parameters": {
@@ -173,7 +146,7 @@
       "name": "Normalize & Enrich Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 180],
+      "position": [1400, 180],
       "notes": "ENTERPRISE: Data processing + PHI masking\nFEATURES: Name parsing, phone normalization, lead scoring\nSECURITY: Masked versions for logs/notifications\nCOMPLIANCE: HIPAA-safe PHI handling"
     },
     {
@@ -406,9 +379,12 @@
       ]
     },
     "Add Execution Metadata": {
-      "main": [[{"node": "Enhanced Validation", "type": "main", "index": 0}]]
+      "main": [[{"node": "Pre-Validation", "type": "main", "index": 0}]]
     },
-    "Enhanced Validation": {
+    "Pre-Validation": {
+      "main": [[{"node": "Check Validation", "type": "main", "index": 0}]]
+    },
+    "Check Validation": {
       "main": [
         [{"node": "Normalize & Enrich Data", "type": "main", "index": 0}],
         [{"node": "Format Validation Error", "type": "main", "index": 0}]
