@@ -37,64 +37,33 @@
     },
     {
       "parameters": {
+        "jsCode": "// CORE V2: Pre-validation to prevent IF node .length expression bug\n// This node validates all fields and returns a validation result\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Required field checks with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length > 100) {\n  errors.push('name_length');\n}\n\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n} else if (body.email.length > 255) {\n  errors.push('email_length');\n}\n\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n} else if (body.phone.length > 20) {\n  errors.push('phone_length');\n}\n\n// Return validation result\nreturn {\n  body: body,\n  trace_id: $input.item.json.trace_id,\n  timestamp: $input.item.json.timestamp,\n  valid: errors.length === 0,\n  errors: errors\n};"
+      },
+      "id": "pre-validation",
+      "name": "Pre-Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "notes": "CORE V2: Pre-validation using Code node\nFIXES: n8n IF node .length expression serialization bug\nCHECKS: Required fields, length limits, email format"
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": false,
-            "typeValidation": "loose"
+            "caseSensitive": true,
+            "typeValidation": "strict"
           },
           "conditions": [
             {
-              "id": "name-check",
-              "leftValue": "={{ $json.body.name }}",
-              "rightValue": "",
+              "id": "valid-check",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
               "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "email-check",
-              "leftValue": "={{ $json.body.email }}",
-              "rightValue": "^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$",
-              "operator": {
-                "type": "string",
-                "operation": "regex"
-              }
-            },
-            {
-              "id": "phone-check",
-              "leftValue": "={{ $json.body.phone }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            },
-            {
-              "id": "name-length",
-              "leftValue": "={{ $json.body.name.length }}",
-              "rightValue": "100",
-              "operator": {
-                "type": "number",
-                "operation": "lessThanOrEqual"
-              }
-            },
-            {
-              "id": "email-length",
-              "leftValue": "={{ $json.body.email.length }}",
-              "rightValue": "255",
-              "operator": {
-                "type": "number",
-                "operation": "lessThanOrEqual"
-              }
-            },
-            {
-              "id": "phone-length",
-              "leftValue": "={{ $json.body.phone.length }}",
-              "rightValue": "20",
-              "operator": {
-                "type": "number",
-                "operation": "lessThanOrEqual"
+                "type": "boolean",
+                "operation": "equals"
               }
             }
           ],
@@ -103,14 +72,14 @@
         "options": {}
       },
       "id": "validation-check",
-      "name": "Basic Validation",
+      "name": "Check Validation",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        600,
+        800,
         300
       ],
-      "notes": "CORE V2: Enhanced validation with length limits and regex email check"
+      "notes": "CORE V2: Simple boolean check (no .length expressions)\nRELIABLE: No UI serialization issues"
     },
     {
       "parameters": {
@@ -121,7 +90,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        800,
+        1000,
         240
       ],
       "notes": "CORE: Basic data cleanup\nINCLUDES: Name split, phone cleanup, email lowercase\nNO: Lead scoring, IP tracking, duplicate detection"
@@ -165,7 +134,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [
-        1000,
+        1200,
         160
       ],
       "retryOnFail": true,
@@ -195,7 +164,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1000,
+        1200,
         240
       ],
       "continueOnFail": true,
@@ -216,7 +185,7 @@
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
       "position": [
-        1000,
+        1200,
         320
       ],
       "retryOnFail": true,
@@ -238,7 +207,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1200,
+        1400,
         240
       ],
       "notes": "CORE: Simple success response\nNO: Performance metrics, execution time tracking"
@@ -252,7 +221,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        800,
+        1000,
         360
       ],
       "notes": "CORE: Generic error message\nNO: Field-specific errors, debug info"
@@ -270,7 +239,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1000,
+        1200,
         360
       ],
       "notes": "CORE: Simple 400 error response"
@@ -284,7 +253,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
+        1400,
         500
       ],
       "notes": "CORE V2: Catches all unhandled errors, prevents silent failures"
@@ -302,7 +271,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1400,
+        1600,
         500
       ],
       "notes": "CORE V2: Returns 500 error to client with trace_id"
@@ -324,14 +293,25 @@
       "main": [
         [
           {
-            "node": "Basic Validation",
+            "node": "Pre-Validation",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Basic Validation": {
+    "Pre-Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation": {
       "main": [
         [
           {
@@ -388,6 +368,7 @@
     },
     "webhook-node": {},
     "add-metadata": {},
+    "pre-validation": {},
     "validation-check": {},
     "normalize-data": {},
     "append-sheets": {},
