@@ -1,0 +1,934 @@
+{
+  "name": "Aigent Module 05: Followup & Retention Enhanced (v1.1)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aigent-followup",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS}}",
+          "rawBody": true
+        }
+      },
+      "id": "webhook-trigger-501",
+      "name": "Webhook: Trigger Follow-Up Sequence",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "module-05-followup-sequence"
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 502: ENHANCED VALIDATION WITH LENGTH CONSTRAINTS\n// ═══════════════════════════════════════════════════════════════\n// Enhancement: Multi-field validation for follow-up sequence\n// - Required: patient_id, patient_email, visit_type\n// - Optional: patient_phone, patient_name, visit_date, provider_name\n// - Email format + length validation (max 320 chars)\n// - Phone format validation (E.164 or digits-only)\n// - Date validation (ISO 8601 format, not future)\n// \n// Shared Pattern: Enhanced Validation (from Module 01)\n// Module-Specific: Marketing automation field validation\n// ═══════════════════════════════════════════════════════════════\n\nconst data = $input.item.json.body;\nconst errors = [];\n\n// Email validation (REQUIRED for all follow-ups)\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!data.patient_email || !emailRegex.test(data.patient_email)) {\n  errors.push('patient_email: required and must be valid email format');\n} else if (data.patient_email.length > 320) {\n  errors.push('patient_email: maximum 320 characters (RFC 5321)');\n}\n\n// Patient ID validation\nif (!data.patient_id || data.patient_id.trim().length === 0) {\n  errors.push('patient_id: required for CRM linking');\n}\n\n// Visit type validation\nif (!data.visit_type || data.visit_type.trim().length === 0) {\n  errors.push('visit_type: required for message personalization');\n} else if (data.visit_type.length > 200) {\n  errors.push('visit_type: maximum 200 characters');\n}\n\n// Phone validation (optional, but validate format if provided)\nif (data.patient_phone) {\n  const phoneDigits = data.patient_phone.replace(/\\D/g, '');\n  if (phoneDigits.length < 7 || phoneDigits.length > 20) {\n    errors.push('patient_phone: must be 7-20 digits');\n  }\n}\n\n// Visit date validation (optional, but validate format if provided)\nif (data.visit_date) {\n  const visitDate = new Date(data.visit_date);\n  const now = new Date();\n  if (isNaN(visitDate.getTime())) {\n    errors.push('visit_date: must be valid ISO 8601 format');\n  } else if (visitDate > now) {\n    errors.push('visit_date: cannot be in the future');\n  }\n}\n\n// Patient name validation (optional, but validate length if provided)\nif (data.patient_name && (data.patient_name.length < 2 || data.patient_name.length > 100)) {\n  errors.push('patient_name: must be 2-100 characters if provided');\n}\n\n// Return validation results\nif (errors.length > 0) {\n  return {\n    json: {\n      validation_passed: false,\n      errors: errors,\n      validated_at: new Date().toISOString()\n    }\n  };\n}\n\nreturn {\n  json: {\n    validation_passed: true,\n    validated_data: {\n      patient_id: data.patient_id.trim(),\n      patient_email: data.patient_email.trim().toLowerCase(),\n      patient_phone: data.patient_phone?.trim() || null,\n      patient_name: data.patient_name?.trim() || 'Valued Patient',\n      visit_type: data.visit_type.trim(),\n      visit_date: data.visit_date || new Date().toISOString(),\n      provider_name: data.provider_name?.trim() || 'Your Provider',\n      trace_id: data.trace_id || null,\n      invoice_id: data.invoice_id || null,\n      payment_status: data.payment_status || null\n    },\n    validated_at: new Date().toISOString()\n  }\n};"
+      },
+      "id": "code-node-502",
+      "name": "Enhanced Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.validation_passed}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-node-503",
+      "name": "Validation Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 504: VALIDATION ERROR RESPONSE\n// ═══════════════════════════════════════════════════════════════\n// Shared Pattern: Standardized Error Response (from Module 01)\n// ═══════════════════════════════════════════════════════════════\n\nconst { DateTime } = require('luxon');\nconst validationResult = $json;\n\nconst errorResponse = {\n  success: false,\n  error: {\n    code: 'VALIDATION_FAILED',\n    message: 'Request validation failed',\n    details: validationResult.errors,\n    trace_id: `ERR-${DateTime.now().toMillis()}`\n  },\n  validated_at: validationResult.validated_at\n};\n\nreturn {\n  json: errorResponse\n};"
+      },
+      "id": "code-node-504",
+      "name": "Validation Error Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 450]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-node-505",
+      "name": "Return: Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1040, 450]
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 506: PREPARE FOLLOW-UP DATA WITH PHONE NORMALIZATION\n// ═══════════════════════════════════════════════════════════════\n// Enhancement: Initialize sequence tracking and normalize phone\n// - Generate trace ID for observability\n// - Phone normalization (digits-only + display format)\n// - Initialize engagement tracking arrays\n// - Generate survey link with tracking parameters\n// - Set execution timer for performance tracking\n// \n// Shared Pattern: Phone Normalization + Execution Time Tracking\n// Module-Specific: Marketing sequence initialization\n// ═══════════════════════════════════════════════════════════════\n\nconst { DateTime } = require('luxon');\nconst data = $json.validated_data;\n\n// Generate trace ID for observability\nconst timestamp = DateTime.now().toMillis();\nconst traceId = data.trace_id || `FU-${timestamp}`;\n\n// Phone normalization (from Module 01 pattern)\nfunction normalizePhone(phone) {\n  if (!phone) return { normalized: null, display: null };\n  \n  const digitsOnly = phone.replace(/\\D/g, '');\n  const phoneNormalized = digitsOnly.length === 10 ? '1' + digitsOnly : digitsOnly;\n  const phoneDisplay = phone.trim();\n  \n  return {\n    normalized: phoneNormalized,\n    display: phoneDisplay\n  };\n}\n\nconst phoneData = normalizePhone(data.patient_phone);\n\n// Generate survey link with tracking parameters\nconst surveyBaseUrl = $env.SURVEY_BASE_URL || 'https://example.com/survey';\nconst surveyLink = `${surveyBaseUrl}?email=${encodeURIComponent(data.patient_email)}&patient_id=${encodeURIComponent(data.patient_id)}&trace_id=${encodeURIComponent(traceId)}`;\n\n// Generate rebooking link\nconst rebookingBaseUrl = $env.REBOOKING_LINK || 'https://example.com/book';\nconst rebookingLink = `${rebookingBaseUrl}?patient_id=${encodeURIComponent(data.patient_id)}&utm_source=followup&utm_medium=email&utm_campaign=day14_rebook&trace_id=${encodeURIComponent(traceId)}`;\n\n// Start execution timer\nconst executionStartTime = DateTime.now().toMillis();\n\n// Initialize follow-up data\nconst followupData = {\n  // Tracking\n  trace_id: traceId,\n  execution_start_time: executionStartTime,\n  sequence_status: 'initiated',\n  touches_sent: [],\n  touch_results: [],\n  \n  // Patient data\n  patient_id: data.patient_id,\n  patient_email: data.patient_email,\n  patient_phone_normalized: phoneData.normalized,\n  patient_phone_display: phoneData.display,\n  patient_name: data.patient_name,\n  \n  // Visit data\n  visit_type: data.visit_type,\n  visit_date: data.visit_date,\n  provider_name: data.provider_name,\n  \n  // Clinic configuration\n  clinic_name: $env.CLINIC_NAME || 'Our Clinic',\n  \n  // Generated links\n  survey_link: surveyLink,\n  rebooking_link: rebookingLink,\n  \n  // Survey data (populated later)\n  nps_score: null,\n  nps_category: null,\n  feedback_text: null,\n  survey_completed_at: null,\n  \n  // Metadata\n  module: 'aigent_module_05',\n  version: '1.1',\n  created_at: DateTime.now().toISO()\n};\n\nreturn {\n  json: followupData\n};"
+      },
+      "id": "code-node-506",
+      "name": "Prepare Follow-Up Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 150]
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 507: DAY-0 THANK YOU EMAIL (ENHANCED)\n// ═══════════════════════════════════════════════════════════════\n// Enhancement: Professional HTML email with retry logic\n// - Retry configuration: 2 attempts, 500ms delay, continueOnFail=true\n// - Rich HTML formatting for better engagement\n// - Personalized content with visit details\n// - Track sending status in touches_sent array\n// \n// Shared Pattern: Retry Logic (from Module 02)\n// Module-Specific: Day-0 immediate thank you touch\n// ═══════════════════════════════════════════════════════════════\n\nconst { DateTime } = require('luxon');\nconst data = $json;\n\n// Format visit date for display\nconst visitDate = DateTime.fromISO(data.visit_date);\nconst visitDateFormatted = visitDate.toFormat('MMMM d, yyyy');\n\n// Email subject\nconst subject = `Thank you for your visit - ${data.clinic_name}`;\n\n// HTML email body\nconst htmlBody = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background-color: #f8f9fa; padding: 20px; border-radius: 5px; }\n    .content { padding: 20px 0; }\n    .footer { font-size: 12px; color: #666; padding-top: 20px; border-top: 1px solid #ddd; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h2 style=\"margin: 0; color: #2c3e50;\">Thank You for Your Visit</h2>\n    </div>\n    \n    <div class=\"content\">\n      <p>Hi ${data.patient_name},</p>\n      \n      <p>Thank you for choosing <strong>${data.clinic_name}</strong> for your <strong>${data.visit_type}</strong> visit on ${visitDateFormatted}. We appreciate your trust in our care.</p>\n      \n      <p>If you have any questions or concerns about your visit or your care plan, please don't hesitate to reach out to our team.</p>\n      \n      <p>Warm regards,<br>\n      ${data.provider_name} and the ${data.clinic_name} Team</p>\n    </div>\n    \n    <div class=\"footer\">\n      <p><em>This is an automated message from ${data.clinic_name}'s follow-up system.</em></p>\n      <p>Trace ID: ${data.trace_id}</p>\n    </div>\n  </div>\n</body>\n</html>\n`;\n\n// Prepare SendGrid payload\nreturn {\n  json: {\n    to: data.patient_email,\n    from: $env.SENDGRID_FROM_EMAIL || 'noreply@clinic.com',\n    subject: subject,\n    html: htmlBody,\n    touch_name: 'day0_email',\n    followup_data: data\n  }\n};"
+      },
+      "id": "code-node-507",
+      "name": "Prepare Day-0 Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 50]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [\n    {\n      \"to\": [{\"email\": \"{{$json.to}}\"}]\n    }\n  ],\n  \"from\": {\"email\": \"{{$json.from}}\"},\n  \"subject\": \"{{$json.subject}}\",\n  \"content\": [\n    {\n      \"type\": \"text/html\",\n      \"value\": {{JSON.stringify($json.html)}}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-node-508",
+      "name": "API: Send Day-0 Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 50],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 509: DAY-0 THANK YOU SMS (ENHANCED)\n// ═══════════════════════════════════════════════════════════════\n// Enhancement: Concise SMS with retry logic\n// - Retry configuration: 2 attempts, 500ms delay, continueOnFail=true\n// - 160-character awareness for SMS pricing\n// - Skip if no phone number provided\n// \n// Shared Pattern: Retry Logic + Phone Normalization\n// Module-Specific: Day-0 immediate thank you SMS\n// ═══════════════════════════════════════════════════════════════\n\nconst data = $json;\n\n// Skip if no phone\nif (!data.patient_phone_display) {\n  return {\n    json: {\n      skip_sms: true,\n      reason: 'No phone number provided',\n      followup_data: data\n    }\n  };\n}\n\n// SMS body (concise for 160-char limit)\nconst smsBody = `Hi ${data.patient_name}, thank you for your visit to ${data.clinic_name} today! We appreciate you. - ${data.provider_name}`;\n\n// Prepare Twilio payload\nreturn {\n  json: {\n    to: data.patient_phone_display,\n    from: $env.TWILIO_PHONE_NUMBER,\n    body: smsBody,\n    skip_sms: false,\n    touch_name: 'day0_sms',\n    followup_data: data\n  }\n};"
+      },
+      "id": "code-node-509",
+      "name": "Prepare Day-0 SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1040, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.skip_sms}}",
+              "value2": false
+            }
+          ]
+        }
+      },
+      "id": "if-node-510",
+      "name": "Send SMS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1240, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_ACCOUNT_SID}}/Messages.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "specifyBody": "urlEncoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{$json.to}}"
+            },
+            {
+              "name": "From",
+              "value": "={{$json.from}}"
+            },
+            {
+              "name": "Body",
+              "value": "={{$json.body}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-node-511",
+      "name": "API: Send Day-0 SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1440, 200],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-node-512",
+      "name": "Merge Day-0 Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [1640, 150]
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 513: TRACK DAY-0 TOUCHES\n// ═══════════════════════════════════════════════════════════════\n// Enhancement: Track delivery status and update sequence state\n// - Record which touches were sent successfully\n// - Track failed deliveries for analytics\n// - Update sequence status for CRM sync\n// \n// Module-Specific: Engagement tracking\n// ═══════════════════════════════════════════════════════════════\n\nconst emailResult = $('API: Send Day-0 Email').item?.json;\nconst smsResult = $('API: Send Day-0 SMS').item?.json;\nconst followupData = $('Prepare Day-0 Email').item.json.followup_data;\n\n// Track successful touches\nconst touchesSent = [];\nconst touchResults = [];\n\nif (emailResult?.statusCode === 202 || emailResult?.statusCode === 200) {\n  touchesSent.push('day0_email');\n  touchResults.push({ touch: 'day0_email', status: 'sent', sent_at: new Date().toISOString() });\n} else {\n  touchResults.push({ touch: 'day0_email', status: 'failed', error: emailResult?.error || 'Unknown error' });\n}\n\nif (smsResult?.sid) {\n  touchesSent.push('day0_sms');\n  touchResults.push({ touch: 'day0_sms', status: 'sent', sent_at: new Date().toISOString(), sms_sid: smsResult.sid });\n} else if (!$('Prepare Day-0 SMS').item.json.skip_sms) {\n  touchResults.push({ touch: 'day0_sms', status: 'failed', error: smsResult?.error || 'Unknown error' });\n}\n\nreturn {\n  json: {\n    ...followupData,\n    touches_sent: touchesSent,\n    touch_results: touchResults,\n    sequence_status: 'day0_complete'\n  }\n};"
+      },
+      "id": "code-node-513",
+      "name": "Track Day-0 Touches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1840, 150]
+    },
+    {
+      "parameters": {
+        "amount": "={{$env.FOLLOWUP_DAY3_DELAY_HOURS || 72}}",
+        "unit": "hours"
+      },
+      "id": "wait-node-514",
+      "name": "Wait 72 Hours (Day 3)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [2040, 150],
+      "webhookId": "module-05-wait-day3"
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 515: DAY-3 CHECK-IN EMAIL\n// ═══════════════════════════════════════════════════════════════\n// Enhancement: Personalized check-in with care focus\n// - Retry configuration: 2 attempts, 500ms delay, continueOnFail=true\n// - Emphasize patient wellness and support\n// \n// Shared Pattern: Retry Logic\n// Module-Specific: Day-3 wellness check-in touch\n// ═══════════════════════════════════════════════════════════════\n\nconst data = $json;\n\nconst subject = `How are you feeling? - ${data.clinic_name}`;\n\nconst htmlBody = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background-color: #e8f5e9; padding: 20px; border-radius: 5px; }\n    .content { padding: 20px 0; }\n    .footer { font-size: 12px; color: #666; padding-top: 20px; border-top: 1px solid #ddd; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h2 style=\"margin: 0; color: #2e7d32;\">Checking In With You</h2>\n    </div>\n    \n    <div class=\"content\">\n      <p>Hi ${data.patient_name},</p>\n      \n      <p>It's been a few days since your <strong>${data.visit_type}</strong> visit with us. We wanted to check in and see how you're feeling.</p>\n      \n      <p>If you have any questions about your visit or your care plan, we're here to help. Just reply to this email or give us a call.</p>\n      \n      <p>Take care,<br>\n      ${data.provider_name} and the ${data.clinic_name} Team</p>\n    </div>\n    \n    <div class=\"footer\">\n      <p><em>This is an automated check-in from ${data.clinic_name}'s follow-up system.</em></p>\n      <p>Trace ID: ${data.trace_id}</p>\n    </div>\n  </div>\n</body>\n</html>\n`;\n\nreturn {\n  json: {\n    to: data.patient_email,\n    from: $env.SENDGRID_FROM_EMAIL || 'noreply@clinic.com',\n    subject: subject,\n    html: htmlBody,\n    touch_name: 'day3_email',\n    followup_data: data\n  }\n};"
+      },
+      "id": "code-node-515",
+      "name": "Prepare Day-3 Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 50]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [\n    {\n      \"to\": [{\"email\": \"{{$json.to}}\"}]\n    }\n  ],\n  \"from\": {\"email\": \"{{$json.from}}\"},\n  \"subject\": \"{{$json.subject}}\",\n  \"content\": [\n    {\n      \"type\": \"text/html\",\n      \"value\": {{JSON.stringify($json.html)}}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-node-516",
+      "name": "API: Send Day-3 Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2440, 50],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 517: DAY-3 CHECK-IN SMS\n// ═══════════════════════════════════════════════════════════════\n\nconst data = $json;\n\nif (!data.patient_phone_display) {\n  return {\n    json: {\n      skip_sms: true,\n      reason: 'No phone number provided',\n      followup_data: data\n    }\n  };\n}\n\nconst smsBody = `Hi ${data.patient_name}, checking in from ${data.clinic_name}. How are you feeling? Reply or call us if you need anything. - ${data.provider_name}`;\n\nreturn {\n  json: {\n    to: data.patient_phone_display,\n    from: $env.TWILIO_PHONE_NUMBER,\n    body: smsBody,\n    skip_sms: false,\n    touch_name: 'day3_sms',\n    followup_data: data\n  }\n};"
+      },
+      "id": "code-node-517",
+      "name": "Prepare Day-3 SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.skip_sms}}",
+              "value2": false
+            }
+          ]
+        }
+      },
+      "id": "if-node-518",
+      "name": "Send SMS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2440, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_ACCOUNT_SID}}/Messages.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "specifyBody": "urlEncoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{$json.to}}"
+            },
+            {
+              "name": "From",
+              "value": "={{$json.from}}"
+            },
+            {
+              "name": "Body",
+              "value": "={{$json.body}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-node-519",
+      "name": "API: Send Day-3 SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2640, 200],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-node-520",
+      "name": "Merge Day-3 Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [2840, 150]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Track Day-3 touches\nconst emailResult = $('API: Send Day-3 Email').item?.json;\nconst smsResult = $('API: Send Day-3 SMS').item?.json;\nconst followupData = $('Prepare Day-3 Email').item.json.followup_data;\n\nconst touchesSent = [...followupData.touches_sent];\nconst touchResults = [...followupData.touch_results];\n\nif (emailResult?.statusCode === 202 || emailResult?.statusCode === 200) {\n  touchesSent.push('day3_email');\n  touchResults.push({ touch: 'day3_email', status: 'sent', sent_at: new Date().toISOString() });\n} else {\n  touchResults.push({ touch: 'day3_email', status: 'failed', error: emailResult?.error || 'Unknown error' });\n}\n\nif (smsResult?.sid) {\n  touchesSent.push('day3_sms');\n  touchResults.push({ touch: 'day3_sms', status: 'sent', sent_at: new Date().toISOString(), sms_sid: smsResult.sid });\n} else if (!$('Prepare Day-3 SMS').item.json.skip_sms) {\n  touchResults.push({ touch: 'day3_sms', status: 'failed', error: smsResult?.error || 'Unknown error' });\n}\n\nreturn {\n  json: {\n    ...followupData,\n    touches_sent: touchesSent,\n    touch_results: touchResults,\n    sequence_status: 'day3_complete'\n  }\n};"
+      },
+      "id": "code-node-521",
+      "name": "Track Day-3 Touches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3040, 150]
+    },
+    {
+      "parameters": {
+        "amount": "={{$env.FOLLOWUP_DAY7_DELAY_HOURS || 96}}",
+        "unit": "hours"
+      },
+      "id": "wait-node-522",
+      "name": "Wait 96 Hours (Day 7)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [3240, 150],
+      "webhookId": "module-05-wait-day7"
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 523: DAY-7 SURVEY EMAIL\n// ═══════════════════════════════════════════════════════════════\n\nconst data = $json;\n\nconst subject = `We'd love your feedback - ${data.clinic_name}`;\n\nconst htmlBody = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background-color: #fff3e0; padding: 20px; border-radius: 5px; }\n    .content { padding: 20px 0; }\n    .cta-button { display: inline-block; background-color: #ff9800; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }\n    .footer { font-size: 12px; color: #666; padding-top: 20px; border-top: 1px solid #ddd; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h2 style=\"margin: 0; color: #e65100;\">Your Feedback Matters</h2>\n    </div>\n    \n    <div class=\"content\">\n      <p>Hi ${data.patient_name},</p>\n      \n      <p>Your feedback helps us improve our care. Would you take 2 minutes to share your experience?</p>\n      \n      <div style=\"text-align: center;\">\n        <a href=\"${data.survey_link}\" class=\"cta-button\">Take Survey Now</a>\n      </div>\n      \n      <p>Thank you for helping us serve you better!</p>\n      \n      <p>Best,<br>\n      ${data.provider_name} and the ${data.clinic_name} Team</p>\n    </div>\n    \n    <div class=\"footer\">\n      <p><em>This is an automated survey request from ${data.clinic_name}'s feedback system.</em></p>\n      <p>Trace ID: ${data.trace_id}</p>\n    </div>\n  </div>\n</body>\n</html>\n`;\n\nreturn {\n  json: {\n    to: data.patient_email,\n    from: $env.SENDGRID_FROM_EMAIL || 'noreply@clinic.com',\n    subject: subject,\n    html: htmlBody,\n    touch_name: 'day7_survey_email',\n    followup_data: data\n  }\n};"
+      },
+      "id": "code-node-523",
+      "name": "Prepare Day-7 Survey Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3440, 50]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [\n    {\n      \"to\": [{\"email\": \"{{$json.to}}\"}]\n    }\n  ],\n  \"from\": {\"email\": \"{{$json.from}}\"},\n  \"subject\": \"{{$json.subject}}\",\n  \"content\": [\n    {\n      \"type\": \"text/html\",\n      \"value\": {{JSON.stringify($json.html)}}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-node-524",
+      "name": "API: Send Day-7 Survey Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3640, 50],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// Day-7 survey SMS\nconst data = $json;\n\nif (!data.patient_phone_display) {\n  return {\n    json: {\n      skip_sms: true,\n      reason: 'No phone number provided',\n      followup_data: data\n    }\n  };\n}\n\nconst smsBody = `Hi ${data.patient_name}, quick 2-min survey about your visit: ${data.survey_link} - ${data.clinic_name}`;\n\nreturn {\n  json: {\n    to: data.patient_phone_display,\n    from: $env.TWILIO_PHONE_NUMBER,\n    body: smsBody,\n    skip_sms: false,\n    touch_name: 'day7_survey_sms',\n    followup_data: data\n  }\n};"
+      },
+      "id": "code-node-525",
+      "name": "Prepare Day-7 Survey SMS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3440, 250]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.skip_sms}}",
+              "value2": false
+            }
+          ]
+        }
+      },
+      "id": "if-node-526",
+      "name": "Send SMS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [3640, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_ACCOUNT_SID}}/Messages.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "twilioApi",
+        "sendBody": true,
+        "specifyBody": "urlEncoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "To",
+              "value": "={{$json.to}}"
+            },
+            {
+              "name": "From",
+              "value": "={{$json.from}}"
+            },
+            {
+              "name": "Body",
+              "value": "={{$json.body}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-node-527",
+      "name": "API: Send Day-7 Survey SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [3840, 200],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "id": "merge-node-528",
+      "name": "Merge Day-7 Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [4040, 150]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Track Day-7 touches\nconst emailResult = $('API: Send Day-7 Survey Email').item?.json;\nconst smsResult = $('API: Send Day-7 Survey SMS').item?.json;\nconst followupData = $('Prepare Day-7 Survey Email').item.json.followup_data;\n\nconst touchesSent = [...followupData.touches_sent];\nconst touchResults = [...followupData.touch_results];\n\nif (emailResult?.statusCode === 202 || emailResult?.statusCode === 200) {\n  touchesSent.push('day7_survey_email');\n  touchResults.push({ touch: 'day7_survey_email', status: 'sent', sent_at: new Date().toISOString() });\n} else {\n  touchResults.push({ touch: 'day7_survey_email', status: 'failed', error: emailResult?.error || 'Unknown error' });\n}\n\nif (smsResult?.sid) {\n  touchesSent.push('day7_survey_sms');\n  touchResults.push({ touch: 'day7_survey_sms', status: 'sent', sent_at: new Date().toISOString(), sms_sid: smsResult.sid });\n} else if (!$('Prepare Day-7 Survey SMS').item.json.skip_sms) {\n  touchResults.push({ touch: 'day7_survey_sms', status: 'failed', error: smsResult?.error || 'Unknown error' });\n}\n\nreturn {\n  json: {\n    ...followupData,\n    touches_sent: touchesSent,\n    touch_results: touchResults,\n    sequence_status: 'day7_complete'\n  }\n};"
+      },
+      "id": "code-node-529",
+      "name": "Track Day-7 Touches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4240, 150]
+    },
+    {
+      "parameters": {
+        "amount": "={{$env.FOLLOWUP_DAY14_DELAY_HOURS || 168}}",
+        "unit": "hours"
+      },
+      "id": "wait-node-530",
+      "name": "Wait 168 Hours (Day 14)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [4440, 150],
+      "webhookId": "module-05-wait-day14"
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 531: DAY-14 REBOOKING EMAIL\n// ═══════════════════════════════════════════════════════════════\n\nconst data = $json;\n\nconst subject = `Ready to book your next visit? - ${data.clinic_name}`;\n\nconst htmlBody = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <style>\n    body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n    .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n    .header { background-color: #e3f2fd; padding: 20px; border-radius: 5px; }\n    .content { padding: 20px 0; }\n    .cta-button { display: inline-block; background-color: #2196f3; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }\n    .footer { font-size: 12px; color: #666; padding-top: 20px; border-top: 1px solid #ddd; }\n  </style>\n</head>\n<body>\n  <div class=\"container\">\n    <div class=\"header\">\n      <h2 style=\"margin: 0; color: #1565c0;\">We're Here When You Need Us</h2>\n    </div>\n    \n    <div class=\"content\">\n      <p>Hi ${data.patient_name},</p>\n      \n      <p>We hope you're doing well! If you're ready for your next <strong>${data.visit_type}</strong> visit or need any follow-up care, we'd love to see you again.</p>\n      \n      <div style=\"text-align: center;\">\n        <a href=\"${data.rebooking_link}\" class=\"cta-button\">Book Your Next Appointment</a>\n      </div>\n      \n      <p>Looking forward to caring for you again,<br>\n      ${data.provider_name} and the ${data.clinic_name} Team</p>\n    </div>\n    \n    <div class=\"footer\">\n      <p><em>This is an automated rebooking reminder from ${data.clinic_name}'s follow-up system.</em></p>\n      <p>Trace ID: ${data.trace_id}</p>\n    </div>\n  </div>\n</body>\n</html>\n`;\n\nreturn {\n  json: {\n    to: data.patient_email,\n    from: $env.SENDGRID_FROM_EMAIL || 'noreply@clinic.com',\n    subject: subject,\n    html: htmlBody,\n    touch_name: 'day14_rebook_email',\n    followup_data: data\n  }\n};"
+      },
+      "id": "code-node-531",
+      "name": "Prepare Day-14 Rebooking Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4640, 150]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.sendgrid.com/v3/mail/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendGridApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"personalizations\": [\n    {\n      \"to\": [{\"email\": \"{{$json.to}}\"}]\n    }\n  ],\n  \"from\": {\"email\": \"{{$json.from}}\"},\n  \"subject\": \"{{$json.subject}}\",\n  \"content\": [\n    {\n      \"type\": \"text/html\",\n      \"value\": {{JSON.stringify($json.html)}}\n    }\n  ]\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-node-532",
+      "name": "API: Send Day-14 Rebooking Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [4840, 150],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 500,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "functionCode": "// ═══════════════════════════════════════════════════════════════\n// NODE 533: EXECUTION TIME TRACKING & SUCCESS RESPONSE\n// ═══════════════════════════════════════════════════════════════\n\nconst { DateTime } = require('luxon');\n\nconst emailResult = $('API: Send Day-14 Rebooking Email').item?.json;\nconst followupData = $('Prepare Day-14 Rebooking Email').item.json.followup_data;\n\nconst touchesSent = [...followupData.touches_sent];\nconst touchResults = [...followupData.touch_results];\n\nif (emailResult?.statusCode === 202 || emailResult?.statusCode === 200) {\n  touchesSent.push('day14_rebook_email');\n  touchResults.push({ touch: 'day14_rebook_email', status: 'sent', sent_at: DateTime.now().toISO() });\n} else {\n  touchResults.push({ touch: 'day14_rebook_email', status: 'failed', error: emailResult?.error || 'Unknown error' });\n}\n\n// Calculate execution time (only for initial setup, not wait time)\nconst executionEndTime = DateTime.now().toMillis();\nconst executionTimeMs = executionEndTime - followupData.execution_start_time;\n\nlet performanceCategory = 'normal';\nif (executionTimeMs < 1000) {\n  performanceCategory = 'fast';\n} else if (executionTimeMs > 3000) {\n  performanceCategory = 'slow';\n}\n\n// Data Contract 05: followup_feedback.json\nconst followupConfirmation = {\n  trace_id: followupData.trace_id,\n  patient_id: followupData.patient_id,\n  sequence_status: 'completed',\n  touches_sent: touchesSent,\n  touch_results: touchResults,\n  survey_link: followupData.survey_link,\n  rebooking_link: followupData.rebooking_link,\n  execution_time_ms: executionTimeMs,\n  performance_category: performanceCategory,\n  completed_at: DateTime.now().toISO(),\n  metadata: {\n    module: 'aigent_module_05',\n    version: '1.1',\n    total_touches: touchesSent.length,\n    visit_type: followupData.visit_type\n  }\n};\n\nreturn {\n  json: followupConfirmation\n};"
+      },
+      "id": "code-node-533",
+      "name": "Execution Tracking & Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [5040, 150]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify($json, null, 2)}}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-node-534",
+      "name": "Return: Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [5240, 150]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Trigger Follow-Up Sequence": {
+      "main": [
+        [
+          {
+            "node": "Enhanced Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enhanced Validation": {
+      "main": [
+        [
+          {
+            "node": "Validation Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Passed?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Follow-Up Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validation Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Error Response": {
+      "main": [
+        [
+          {
+            "node": "Return: Validation Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Follow-Up Data": {
+      "main": [
+        [
+          {
+            "node": "Prepare Day-0 Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Day-0 SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Day-0 Email": {
+      "main": [
+        [
+          {
+            "node": "API: Send Day-0 Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Send Day-0 Email": {
+      "main": [
+        [
+          {
+            "node": "Merge Day-0 Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Day-0 SMS": {
+      "main": [
+        [
+          {
+            "node": "Send SMS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS?": {
+      "main": [
+        [
+          {
+            "node": "API: Send Day-0 SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Day-0 Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "API: Send Day-0 SMS": {
+      "main": [
+        [
+          {
+            "node": "Merge Day-0 Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Day-0 Results": {
+      "main": [
+        [
+          {
+            "node": "Track Day-0 Touches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Day-0 Touches": {
+      "main": [
+        [
+          {
+            "node": "Wait 72 Hours (Day 3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 72 Hours (Day 3)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Day-3 Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Day-3 SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Day-3 Email": {
+      "main": [
+        [
+          {
+            "node": "API: Send Day-3 Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Send Day-3 Email": {
+      "main": [
+        [
+          {
+            "node": "Merge Day-3 Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Day-3 SMS": {
+      "main": [
+        [
+          {
+            "node": "Send SMS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Send Day-3 SMS": {
+      "main": [
+        [
+          {
+            "node": "Merge Day-3 Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Day-3 Results": {
+      "main": [
+        [
+          {
+            "node": "Track Day-3 Touches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Day-3 Touches": {
+      "main": [
+        [
+          {
+            "node": "Wait 96 Hours (Day 7)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 96 Hours (Day 7)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Day-7 Survey Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Day-7 Survey SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Day-7 Survey Email": {
+      "main": [
+        [
+          {
+            "node": "API: Send Day-7 Survey Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Send Day-7 Survey Email": {
+      "main": [
+        [
+          {
+            "node": "Merge Day-7 Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Day-7 Survey SMS": {
+      "main": [
+        [
+          {
+            "node": "Send SMS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Send Day-7 Survey SMS": {
+      "main": [
+        [
+          {
+            "node": "Merge Day-7 Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Day-7 Results": {
+      "main": [
+        [
+          {
+            "node": "Track Day-7 Touches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Track Day-7 Touches": {
+      "main": [
+        [
+          {
+            "node": "Wait 168 Hours (Day 14)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 168 Hours (Day 14)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Day-14 Rebooking Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Day-14 Rebooking Email": {
+      "main": [
+        [
+          {
+            "node": "API: Send Day-14 Rebooking Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API: Send Day-14 Rebooking Email": {
+      "main": [
+        [
+          {
+            "node": "Execution Tracking & Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execution Tracking & Success Response": {
+      "main": [
+        [
+          {
+            "node": "Return: Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "meta": {
+    "module": "aigent_module_05",
+    "version": "1.1",
+    "description": "Enhanced multi-touch follow-up sequence with retry logic, phone normalization, and engagement tracking",
+    "author": "Aigent System",
+    "created": "2025-01-XX",
+    "phi_level": "NONE",
+    "dependencies": ["module_04"],
+    "integrations": ["sendgrid", "twilio"],
+    "wait_nodes": 3,
+    "total_duration": "336 hours (14 days)",
+    "touches": ["day0_email", "day0_sms", "day3_email", "day3_sms", "day7_survey_email", "day7_survey_sms", "day14_rebook_email"]
+  },
+  "id": "module-05-enhanced",
+  "tags": []
+}

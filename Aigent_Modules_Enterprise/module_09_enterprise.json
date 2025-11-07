@@ -1,0 +1,329 @@
+{
+  "name": "Aigent Module 09 - Enhanced Compliance & Audit (v1.1)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aigent-audit-log",
+        "responseMode": "responseNode",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "id": "node-901-webhook-receiver",
+      "name": "901: Webhook - Audit Event Receiver",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "aigent-audit-log-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 902: VALIDATE & NORMALIZE INPUT\n// Purpose: Enforce schema, generate audit_id (KSUID-style), validate timestamps\n// ============================================================================\n\nconst DateTime = luxon.DateTime;\nconst data = $input.first().json.body;\n\n// Parse input\nlet module = data.module;\nlet event = data.event;\nlet timestamp = data.timestamp;\nlet severity = data.severity || 'info';\nlet actor = data.actor || {};\nlet resource = data.resource || {};\nlet payload = data.payload || {};\nlet trace_id = data.trace_id || '';\n\n// ============================================================================\n// VALIDATION: Required Fields\n// ============================================================================\n\nconst errors = [];\n\nif (!module || typeof module !== 'string' || module.trim() === '') {\n  errors.push('module is required and must be a non-empty string');\n}\n\nif (!event || typeof event !== 'string' || event.trim() === '') {\n  errors.push('event is required and must be a non-empty string');\n}\n\nif (!timestamp || typeof timestamp !== 'string') {\n  errors.push('timestamp is required and must be ISO 8601 string');\n} else {\n  // Validate ISO 8601 format\n  const parsedTimestamp = DateTime.fromISO(timestamp);\n  if (!parsedTimestamp.isValid) {\n    errors.push(`timestamp is not valid ISO 8601 format: ${timestamp}`);\n  }\n}\n\n// Severity validation\nconst validSeverities = ['info', 'warning', 'high', 'critical'];\nif (!validSeverities.includes(severity)) {\n  errors.push(`severity must be one of: ${validSeverities.join(', ')}`);\n}\n\n// If validation errors, return them (will be caught by error handler)\nif (errors.length > 0) {\n  throw new Error(`Validation failed: ${errors.join('; ')}`);\n}\n\n// ============================================================================\n// GENERATE AUDIT ID (KSUID-style: prefix + timestamp + random)\n// ============================================================================\n\nconst now = DateTime.now();\nconst timestampMs = now.toMillis();\nconst randomSuffix = Math.random().toString(36).substring(2, 7);\nconst audit_id = `aud_${timestampMs}_${randomSuffix}`;\n\n// Generate trace_id if missing\nif (!trace_id) {\n  trace_id = `${module.toUpperCase().replace(/\\s+/g, '_')}-${timestampMs}`;\n}\n\n// ============================================================================\n// NORMALIZE ACTOR FIELDS\n// ============================================================================\n\nconst actor_type = actor.type || 'system';\nconst actor_id = actor.id || 'unknown';\nconst actor_ip = actor.ip || null;\n\n// ============================================================================\n// NORMALIZE RESOURCE FIELDS\n// ============================================================================\n\nconst resource_type = resource.type || null;\nconst resource_id = resource.id || null;\n\n// ============================================================================\n// OUTPUT NORMALIZED EVENT\n// ============================================================================\n\nreturn {\n  audit_id,\n  ts: timestamp,\n  ingested_at: now.toISO(),\n  module,\n  event,\n  severity,\n  actor_type,\n  actor_id,\n  actor_ip,\n  resource_type,\n  resource_id,\n  payload,\n  trace_id,\n  validation_status: 'passed',\n  validation_errors: []\n};"
+      },
+      "id": "node-902-validate-normalize",
+      "name": "902: Validate & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 903: PHI MINIMIZATION & DATA MASKING\n// Purpose: HIPAA-compliant data minimization (45 CFR § 164.514(d))\n// ============================================================================\n\nconst data = $input.first().json;\n\n// Configuration from environment\nconst maskEmailLocal = ($env.MASK_EMAIL_LOCAL || 'true') === 'true';\nconst maskIP = ($env.MASK_IP || 'true') === 'true';\nconst maskIdLastDigits = parseInt($env.MASK_ID_LAST_DIGITS || '4');\n\n// ============================================================================\n// MASKING FUNCTIONS\n// ============================================================================\n\n/**\n * Mask email address (local part only, preserve domain for routing)\n * john.doe@example.com → j***@example.com\n */\nfunction maskEmail(email) {\n  if (!maskEmailLocal || !email || typeof email !== 'string' || !email.includes('@')) {\n    return email;\n  }\n  const [local, domain] = email.split('@');\n  if (local.length <= 1) return `*@${domain}`;\n  return `${local.charAt(0)}***@${domain}`;\n}\n\n/**\n * Mask IP address (preserve network portion for geolocation)\n * IPv4: 203.0.113.42 → 203.0.113.***\n * IPv6: 2001:0db8:85a3::7334 → 2001:0db8:85a3:****\n */\nfunction maskIPAddress(ip) {\n  if (!maskIP || !ip || typeof ip !== 'string') return ip;\n  \n  // IPv4 detection\n  if (ip.includes('.')) {\n    const parts = ip.split('.');\n    if (parts.length === 4) {\n      return `${parts[0]}.${parts[1]}.${parts[2]}.***`;\n    }\n  }\n  \n  // IPv6 detection\n  if (ip.includes(':')) {\n    const parts = ip.split(':');\n    if (parts.length >= 4) {\n      return `${parts[0]}:${parts[1]}:${parts[2]}:****`;\n    }\n  }\n  \n  return ip;\n}\n\n/**\n * Mask ID fields (preserve last N digits for support correlation)\n * patient_123456789 → ***6789\n * MRN_ABC123 → ***123\n */\nfunction maskID(id) {\n  if (!id || typeof id !== 'string' || maskIdLastDigits === 0) {\n    return maskIdLastDigits === 0 ? '[REDACTED]' : id;\n  }\n  \n  if (id.length <= maskIdLastDigits) return id; // Too short to mask\n  \n  const lastDigits = id.slice(-maskIdLastDigits);\n  return `***${lastDigits}`;\n}\n\n/**\n * Redact sensitive keywords entirely\n * Fields containing: ssn, password, token, secret, credit_card, cvv\n */\nfunction shouldRedactCompletely(key) {\n  const redactKeywords = ['ssn', 'password', 'token', 'secret', 'credit_card', 'cvv', 'api_key'];\n  const keyLower = key.toLowerCase();\n  return redactKeywords.some(keyword => keyLower.includes(keyword));\n}\n\n/**\n * Recursively mask payload object\n */\nfunction maskPayload(obj) {\n  if (obj === null || obj === undefined) return obj;\n  if (typeof obj !== 'object') return obj;\n  \n  const masked = Array.isArray(obj) ? [] : {};\n  \n  for (const [key, value] of Object.entries(obj)) {\n    // Complete redaction for sensitive keys\n    if (shouldRedactCompletely(key)) {\n      masked[key] = '[REDACTED]';\n      continue;\n    }\n    \n    // Type-specific masking\n    if (typeof value === 'string') {\n      // Email detection\n      if (key.toLowerCase().includes('email') && value.includes('@')) {\n        masked[key] = maskEmail(value);\n      }\n      // ID detection (patient_id, user_id, mrn, etc.)\n      else if (key.toLowerCase().match(/(id|mrn|member|account|patient|user)/)) {\n        masked[key] = maskID(value);\n      }\n      // Phone detection\n      else if (key.toLowerCase().includes('phone')) {\n        const digits = value.replace(/\\D/g, '');\n        if (digits.length >= 7) {\n          masked[key] = value.replace(digits, '***' + digits.slice(-4));\n        } else {\n          masked[key] = value;\n        }\n      }\n      else {\n        masked[key] = value;\n      }\n    }\n    else if (typeof value === 'object') {\n      masked[key] = maskPayload(value); // Recursive\n    }\n    else {\n      masked[key] = value; // Numbers, booleans, etc.\n    }\n  }\n  \n  return masked;\n}\n\n// ============================================================================\n// APPLY MASKING TO INPUT DATA\n// ============================================================================\n\nconst masked = {\n  ...data,\n  actor_ip: maskIPAddress(data.actor_ip),\n  resource_id: data.resource_id ? maskID(data.resource_id) : data.resource_id,\n  payload: maskPayload(data.payload)\n};\n\n// Add masking metadata\nmasked.phi_masking = {\n  email_masked: maskEmailLocal,\n  ip_masked: maskIP,\n  id_last_digits: maskIdLastDigits,\n  applied_at: new Date().toISOString()\n};\n\nreturn masked;"
+      },
+      "id": "node-903-phi-minimization",
+      "name": "903: PHI Minimization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 904: CALCULATE HASH CHAIN (Blockchain-style SHA-256)\n// Purpose: Tamper-evident audit trail\n// ============================================================================\n\nconst crypto = require('crypto');\nconst data = $input.first().json;\n\n// ============================================================================\n// RETRIEVE PREVIOUS HASH (from last audit record)\n// ============================================================================\n\n// In production, query database for most recent record_hash\n// For this consolidated workflow, we'll use environment variable or default\nconst prev_hash = $env.AUDIT_LAST_HASH || '0000000000000000000000000000000000000000000000000000000000000000'; // GENESIS\n\n// ============================================================================\n// BUILD CANONICAL DATA FOR HASHING\n// ============================================================================\n\n// Create deterministic representation (sorted keys)\nconst canonicalData = {\n  audit_id: data.audit_id,\n  ts: data.ts,\n  module: data.module,\n  event: data.event,\n  severity: data.severity,\n  actor_type: data.actor_type,\n  actor_id: data.actor_id,\n  resource_type: data.resource_type,\n  resource_id: data.resource_id,\n  payload_hash: crypto.createHash('sha256').update(JSON.stringify(data.payload)).digest('hex'),\n  prev_hash: prev_hash\n};\n\n// Convert to canonical JSON string (sorted keys)\nconst canonicalString = JSON.stringify(canonicalData, Object.keys(canonicalData).sort());\n\n// ============================================================================\n// COMPUTE SHA-256 HASH\n// ============================================================================\n\nconst record_hash = crypto.createHash('sha256').update(canonicalString).digest('hex');\n\n// ============================================================================\n// OUTPUT WITH HASH CHAIN\n// ============================================================================\n\nreturn {\n  ...data,\n  record_hash,\n  prev_hash,\n  hash_algorithm: 'SHA-256',\n  canonical_data: canonicalData\n};"
+      },
+      "id": "node-904-hash-chain",
+      "name": "904: Calculate Hash Chain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 905: DETERMINE STORAGE BACKENDS\n// Purpose: Route to primary storage and optional secondary archive\n// ============================================================================\n\nconst data = $input.first().json;\nconst DateTime = luxon.DateTime;\n\n// Storage configuration from environment\nconst primaryBackend = ($env.LOG_PRIMARY || 'postgres').toLowerCase();\nconst secondaryBackend = ($env.LOG_SECONDARY || 'none').toLowerCase();\n\n// Retention policy (default: 7 years = 2555 days for HIPAA)\nconst retentionDays = parseInt($env.DATA_RETENTION_DAYS || '2555');\nconst expiresAt = DateTime.fromISO(data.ts).plus({ days: retentionDays }).toISO();\n\n// ============================================================================\n// OUTPUT WITH ROUTING METADATA\n// ============================================================================\n\nreturn {\n  ...data,\n  backends: {\n    primary: primaryBackend,\n    secondary: secondaryBackend\n  },\n  retention: {\n    policy_days: retentionDays,\n    expires_at: expiresAt\n  }\n};"
+      },
+      "id": "node-905-determine-backends",
+      "name": "905: Determine Backends",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 906: PRIMARY STORAGE FRAMEWORK\n// Purpose: Prepare data for storage in selected backend\n// ============================================================================\n// NOTE: This consolidated workflow provides the data structure.\n// In production, add actual storage nodes (PostgreSQL, Sheets, Airtable)\n// based on backends.primary value and route with Switch node.\n// ============================================================================\n\nconst data = $input.first().json;\n\n// ============================================================================\n// PREPARE STORAGE RECORD\n// ============================================================================\n\nconst storageRecord = {\n  // Database columns / Spreadsheet columns\n  audit_id: data.audit_id,\n  ts: data.ts,\n  module: data.module,\n  event: data.event,\n  severity: data.severity,\n  actor_type: data.actor_type,\n  actor_id: data.actor_id,\n  actor_ip: data.actor_ip,\n  resource_type: data.resource_type,\n  resource_id: data.resource_id,\n  payload_json: JSON.stringify(data.payload),\n  record_hash: data.record_hash,\n  prev_hash: data.prev_hash,\n  retention_expires_at: data.retention.expires_at,\n  trace_id: data.trace_id,\n  created_at: data.ingested_at\n};\n\n// ============================================================================\n// PRODUCTION EXPANSION NOTES\n// ============================================================================\n// 1. Add Switch node here routing on data.backends.primary:\n//    - Route 'postgres' → PostgreSQL Insert node (Node 907)\n//    - Route 'sheets' → Google Sheets Append node (Node 908)\n//    - Route 'airtable' → Airtable Create node (Node 909)\n//\n// 2. PostgreSQL Node Configuration:\n//    - Type: Insert\n//    - Table: audit_log\n//    - Columns: Map storageRecord fields\n//    - Options: Insert on conflict (idempotency on audit_id)\n//    - Retry: maxTries=2, waitBetweenTries=2000ms\n//\n// 3. Google Sheets Node Configuration:\n//    - Operation: Append\n//    - Document ID: $env.GOOGLE_SHEET_ID\n//    - Sheet Name: $env.GOOGLE_SHEET_TAB_AUDIT\n//    - Data Mode: Define Below\n//    - Columns: Map storageRecord fields to sheet columns\n//    - Retry: maxTries=2, waitBetweenTries=1000ms\n//\n// 4. Airtable Node Configuration:\n//    - Operation: Create\n//    - Base ID: $env.AIRTABLE_BASE_ID\n//    - Table: $env.AIRTABLE_TABLE_NAME\n//    - Fields: Map storageRecord fields\n//    - Retry: maxTries=2, waitBetweenTries=1000ms\n// ============================================================================\n\nreturn {\n  ...data,\n  storage_record: storageRecord,\n  storage_status: 'prepared',\n  storage_backend: data.backends.primary\n};"
+      },
+      "id": "node-906-primary-storage",
+      "name": "906: Primary Storage Framework",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 910: SECONDARY ARCHIVE FRAMEWORK (S3)\n// Purpose: Prepare JSONL archive for immutable S3 storage\n// ============================================================================\n// NOTE: This consolidated workflow provides the JSONL format.\n// In production, add AWS S3 node to append to partitioned archive.\n// ============================================================================\n\nconst data = $input.first().json;\nconst DateTime = luxon.DateTime;\n\n// Skip if no secondary backend\nif (data.backends.secondary === 'none') {\n  return {\n    ...data,\n    archive_status: 'skipped',\n    archive_reason: 'no secondary backend configured'\n  };\n}\n\n// ============================================================================\n// PREPARE S3 ARCHIVE (JSONL FORMAT)\n// ============================================================================\n\nconst timestamp = DateTime.fromISO(data.ts);\n\n// Partition path: s3://bucket/audit/YYYY/MM/DD/HH/audit.jsonl\nconst partitionPath = `audit/${timestamp.toFormat('yyyy/MM/dd/HH')}/audit.jsonl`;\n\n// JSONL line (one record per line, no pretty printing)\nconst jsonlLine = JSON.stringify({\n  audit_id: data.audit_id,\n  ts: data.ts,\n  module: data.module,\n  event: data.event,\n  severity: data.severity,\n  actor_type: data.actor_type,\n  actor_id: data.actor_id,\n  actor_ip: data.actor_ip,\n  resource_type: data.resource_type,\n  resource_id: data.resource_id,\n  payload: data.payload,\n  record_hash: data.record_hash,\n  prev_hash: data.prev_hash,\n  trace_id: data.trace_id,\n  archived_at: DateTime.now().toISO()\n}) + '\\n';\n\n// ============================================================================\n// PRODUCTION EXPANSION NOTES\n// ============================================================================\n// 1. Add AWS S3 node (Node 912):\n//    - Operation: Append to object\n//    - Bucket: $env.S3_BUCKET\n//    - File Key: partitionPath\n//    - Content: jsonlLine\n//    - Content-Type: application/x-ndjson\n//    - Server-Side Encryption: AES256\n//    - Retry: maxTries=2, waitBetweenTries=1000ms\n//\n// 2. Generate Signed URL node (Node 913):\n//    - Operation: Get presigned URL\n//    - Bucket: $env.S3_BUCKET\n//    - File Key: partitionPath\n//    - Expires: 600 seconds (10 minutes)\n//    - HTTP Method: GET\n//\n// 3. Return signed URL in response for audit verification\n// ============================================================================\n\nconst s3Bucket = $env.S3_BUCKET || 'aigent-audit-archive';\nconst s3Region = $env.S3_REGION || 'us-east-1';\n\nreturn {\n  ...data,\n  archive: {\n    backend: data.backends.secondary,\n    bucket: s3Bucket,\n    key: partitionPath,\n    region: s3Region,\n    content: jsonlLine,\n    status: 'prepared'\n  }\n};"
+      },
+      "id": "node-910-secondary-archive",
+      "name": "910: Secondary Archive Framework",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 915: EVALUATE ALERT CONDITIONS\n// Purpose: Determine if this audit event should trigger alerts\n// ============================================================================\n\nconst data = $input.first().json;\nconst DateTime = luxon.DateTime;\n\n// Alert configuration from environment\nconst alertSeverities = ($env.ALERT_SEVERITY || 'warning,high,critical').split(',').map(s => s.trim());\nconst watchEvents = ($env.WATCH_EVENTS || 'document_export,bulk_download,login_failure,phi_access').split(',').map(e => e.trim());\nconst afterHoursStart = parseInt(($env.AFTER_HOURS_START || '18:00').split(':')[0]);\nconst afterHoursEnd = parseInt(($env.AFTER_HOURS_END || '08:00').split(':')[0]);\nconst timezone = $env.TIMEZONE || 'America/New_York';\n\n// ============================================================================\n// ALERT CONDITION CHECKS\n// ============================================================================\n\nconst alertConditions = [];\nlet shouldAlert = false;\n\n// Condition 1: Severity threshold\nif (alertSeverities.includes(data.severity)) {\n  alertConditions.push(`severity_threshold`);\n  shouldAlert = true;\n}\n\n// Condition 2: Watch events (always alert regardless of severity)\nif (watchEvents.includes(data.event)) {\n  alertConditions.push(`watch_event`);\n  shouldAlert = true;\n}\n\n// Condition 3: After-hours PHI access\nconst eventTime = DateTime.fromISO(data.ts, { zone: timezone });\nconst eventHour = eventTime.hour;\n\nconst isAfterHours = (afterHoursEnd < afterHoursStart)\n  ? (eventHour >= afterHoursStart || eventHour < afterHoursEnd)  // Spans midnight\n  : (eventHour >= afterHoursStart && eventHour < afterHoursEnd); // Same day\n\nconst isPHIRelated = data.event.toLowerCase().includes('phi') ||\n                     data.event.toLowerCase().includes('patient') ||\n                     data.event.toLowerCase().includes('document') ||\n                     data.resource_type === 'patient_record' ||\n                     data.resource_type === 'document';\n\nif (isAfterHours && isPHIRelated) {\n  alertConditions.push(`after_hours_phi_access`);\n  shouldAlert = true;\n}\n\n// Condition 4: Failed authentication (multiple attempts)\nif (data.event.toLowerCase().includes('login_failure') || data.event.toLowerCase().includes('auth_failure')) {\n  alertConditions.push(`authentication_failure`);\n  shouldAlert = true;\n}\n\n// Condition 5: Bulk operations (data exfiltration risk)\nif (data.event.toLowerCase().includes('bulk') || data.event.toLowerCase().includes('mass') || data.event.toLowerCase().includes('export_all')) {\n  alertConditions.push(`bulk_operation`);\n  shouldAlert = true;\n}\n\n// ============================================================================\n// OUTPUT WITH ALERT DECISION\n// ============================================================================\n\nreturn {\n  ...data,\n  alert: {\n    should_alert: shouldAlert,\n    conditions_met: alertConditions,\n    evaluated_at: DateTime.now().toISO(),\n    after_hours: isAfterHours,\n    phi_related: isPHIRelated\n  }\n};"
+      },
+      "id": "node-915-evaluate-alerts",
+      "name": "915: Evaluate Alert Conditions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 917: ALERT FRAMEWORK (Slack & Email)\n// Purpose: Prepare alert messages for delivery\n// ============================================================================\n// NOTE: This consolidated workflow provides alert message formatting.\n// In production, add If node + HTTP (Slack) and Send Email nodes.\n// ============================================================================\n\nconst data = $input.first().json;\n\n// Skip if no alert needed\nif (!data.alert.should_alert) {\n  return {\n    ...data,\n    alert_sent: false,\n    alert_reason: 'no conditions met'\n  };\n}\n\n// ============================================================================\n// PREPARE SLACK ALERT MESSAGE\n// ============================================================================\n\nconst slackMessage = {\n  text: `🚨 *Audit Alert: ${data.alert.conditions_met.join(', ')}*`,\n  blocks: [\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*🚨 Audit Alert: ${data.alert.conditions_met.join(', ')}*`\n      }\n    },\n    {\n      type: 'section',\n      fields: [\n        { type: 'mrkdwn', text: `*Audit Event:*\\n${data.event}` },\n        { type: 'mrkdwn', text: `*Module:*\\n${data.module}` },\n        { type: 'mrkdwn', text: `*Severity:*\\n${data.severity}` },\n        { type: 'mrkdwn', text: `*Actor:*\\n${data.actor_type}: ${data.actor_id}` },\n        { type: 'mrkdwn', text: `*Resource:*\\n${data.resource_type || 'N/A'}: ${data.resource_id || 'N/A'}` },\n        { type: 'mrkdwn', text: `*Timestamp:*\\n${data.ts}` }\n      ]\n    },\n    {\n      type: 'section',\n      text: {\n        type: 'mrkdwn',\n        text: `*Conditions Met:*\\n${data.alert.conditions_met.map(c => `• ${c.replace(/_/g, ' ')}`).join('\\n')}`\n      }\n    },\n    {\n      type: 'context',\n      elements: [\n        {\n          type: 'mrkdwn',\n          text: `Aigent Module 09 | Audit ID: ${data.audit_id} | Trace ID: ${data.trace_id}`\n        }\n      ]\n    }\n  ]\n};\n\n// ============================================================================\n// PREPARE EMAIL ALERT\n// ============================================================================\n\nconst emailSubject = `🚨 Audit Alert: ${data.event} [${data.severity}]`;\nconst emailBody = `\n<html>\n<head>\n<style>\n  body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n  .alert-header { background: #f44336; color: white; padding: 15px; border-radius: 5px; }\n  .alert-table { width: 100%; border-collapse: collapse; margin: 20px 0; }\n  .alert-table th { background: #f5f5f5; padding: 10px; text-align: left; border-bottom: 2px solid #ddd; }\n  .alert-table td { padding: 10px; border-bottom: 1px solid #eee; }\n  .conditions { background: #fff3cd; padding: 10px; border-left: 4px solid #ffc107; margin: 15px 0; }\n  .footer { font-size: 12px; color: #666; margin-top: 20px; }\n</style>\n</head>\n<body>\n  <div class=\"alert-header\">\n    <h2>🚨 Audit Alert</h2>\n  </div>\n  \n  <table class=\"alert-table\">\n    <tr><th>Field</th><th>Value</th></tr>\n    <tr><td><strong>Audit Event</strong></td><td>${data.event}</td></tr>\n    <tr><td><strong>Module</strong></td><td>${data.module}</td></tr>\n    <tr><td><strong>Severity</strong></td><td><span style=\"color: ${data.severity === 'critical' ? '#f44336' : data.severity === 'high' ? '#ff9800' : '#ffc107'}\">${data.severity.toUpperCase()}</span></td></tr>\n    <tr><td><strong>Actor</strong></td><td>${data.actor_type}: ${data.actor_id} (IP: ${data.actor_ip || 'N/A'})</td></tr>\n    <tr><td><strong>Resource</strong></td><td>${data.resource_type || 'N/A'}: ${data.resource_id || 'N/A'}</td></tr>\n    <tr><td><strong>Timestamp</strong></td><td>${data.ts}</td></tr>\n    <tr><td><strong>Trace ID</strong></td><td>${data.trace_id}</td></tr>\n    <tr><td><strong>Audit ID</strong></td><td>${data.audit_id}</td></tr>\n  </table>\n  \n  <div class=\"conditions\">\n    <strong>Alert Conditions Met:</strong>\n    <ul>\n      ${data.alert.conditions_met.map(c => `<li>${c.replace(/_/g, ' ')}</li>`).join('')}\n    </ul>\n  </div>\n  \n  <div class=\"footer\">\n    <p>Generated by Aigent Module 09 - Compliance & Audit Logging</p>\n    <p>Support: ${$env.SUPPORT_EMAIL || 'support@aigent.company'}</p>\n  </div>\n</body>\n</html>\n`;\n\n// ============================================================================\n// PRODUCTION EXPANSION NOTES\n// ============================================================================\n// 1. Add If node: Route based on data.alert.should_alert === true\n//\n// 2. Add HTTP Request node for Slack (Node 917):\n//    - Method: POST\n//    - URL: $env.SLACK_WEBHOOK_URL\n//    - Body: JSON.stringify(slackMessage)\n//    - Headers: Content-Type: application/json\n//    - continueOnFail: true (alerts shouldn't block audit storage)\n//    - Retry: maxTries=2, waitBetweenTries=500ms\n//\n// 3. Add Send Email node (Node 918):\n//    - To: $env.ALERT_EMAIL\n//    - Subject: emailSubject\n//    - Body: emailBody (HTML)\n//    - continueOnFail: true\n//    - Retry: maxTries=2, waitBetweenTries=500ms\n// ============================================================================\n\nreturn {\n  ...data,\n  alert_message: {\n    slack: slackMessage,\n    email: {\n      subject: emailSubject,\n      body: emailBody\n    }\n  },\n  alert_prepared: true\n};"
+      },
+      "id": "node-917-alert-framework",
+      "name": "917: Alert Framework",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 919: BUILD SUCCESS RESPONSE\n// Purpose: Construct standardized audit_log.json response\n// ============================================================================\n\nconst data = $input.first().json;\nconst DateTime = luxon.DateTime;\n\n// Calculate execution time\nconst executionStartTime = $execution.startedAt ? $execution.startedAt.toMillis() : DateTime.now().toMillis();\nconst executionEndTime = DateTime.now().toMillis();\nconst executionTimeMs = executionEndTime - executionStartTime;\n\n// Performance categorization\nlet performanceCategory = 'normal';\nif (executionTimeMs < 500) performanceCategory = 'fast';\nelse if (executionTimeMs > 2000) performanceCategory = 'slow';\n\n// ============================================================================\n// BUILD RESPONSE OBJECT\n// ============================================================================\n\nconst response = {\n  success: true,\n  audit_id: data.audit_id,\n  ingested_at: data.ingested_at,\n  module: data.module,\n  event: data.event,\n  severity: data.severity,\n  record_hash: data.record_hash,\n  prev_hash: data.prev_hash,\n  backends: {\n    primary: data.backends.primary,\n    secondary: data.backends.secondary\n  },\n  retention: {\n    policy_days: data.retention.policy_days,\n    expires_at: data.retention.expires_at\n  },\n  alerts_triggered: data.alert.should_alert ? data.alert.conditions_met : ['none'],\n  metadata: {\n    writer: 'Aigent_Module_09_Enhanced',\n    version: $env.WORKFLOW_VERSION || '1.1.0',\n    hash_algorithm: data.hash_algorithm,\n    phi_masked: true,\n    trace_id: data.trace_id,\n    execution_time_ms: executionTimeMs,\n    performance: performanceCategory,\n    n8n_execution_id: $execution.id,\n    timestamp: DateTime.now().toISO()\n  }\n};\n\n// Add archive information if available\nif (data.archive && data.archive.status === 'prepared') {\n  response.archive = {\n    backend: data.archive.backend,\n    bucket: data.archive.bucket,\n    key: data.archive.key,\n    region: data.archive.region\n    // In production, add signed URL from Node 913\n  };\n}\n\nreturn response;"
+      },
+      "id": "node-919-build-response",
+      "name": "919: Build Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2050, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "X-Audit-ID",
+                "value": "={{ $json.audit_id }}"
+              },
+              {
+                "name": "X-Trace-ID",
+                "value": "={{ $json.metadata.trace_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-920-respond-success",
+      "name": "920: Respond - Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================================\n// NODE 930: ERROR HANDLER\n// Purpose: Catch errors, format error response, log to DLQ\n// ============================================================================\n\nconst DateTime = luxon.DateTime;\n\n// Get error details\nconst error = $input.first().error || {};\nconst errorMessage = error.message || 'Unknown error';\nconst errorStack = error.stack || '';\n\n// Get original input if available\nlet originalData = {};\ntry {\n  originalData = $('901: Webhook - Audit Event Receiver').first().json.body || {};\n} catch (e) {\n  originalData = { error: 'Could not retrieve original input' };\n}\n\n// Generate error trace ID\nconst errorTraceId = `err_${DateTime.now().toMillis()}_${Math.random().toString(36).substring(2, 7)}`;\n\n// ============================================================================\n// DETERMINE ERROR TYPE & STAGE\n// ============================================================================\n\nlet errorType = 'InternalError';\nlet errorStage = 'unknown';\nlet httpStatusCode = 500;\n\nif (errorMessage.includes('Validation failed')) {\n  errorType = 'ValidationError';\n  errorStage = 'validate';\n  httpStatusCode = 400;\n} else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {\n  errorType = 'TimeoutError';\n  errorStage = 'persist';\n  httpStatusCode = 504;\n} else if (errorMessage.includes('database') || errorMessage.includes('connection')) {\n  errorType = 'DatabaseError';\n  errorStage = 'persist';\n  httpStatusCode = 500;\n}\n\n// ============================================================================\n// BUILD ERROR RESPONSE\n// ============================================================================\n\nconst errorResponse = {\n  success: false,\n  error: errorMessage,\n  error_type: errorType,\n  stage: errorStage,\n  trace_id: errorTraceId,\n  timestamp: DateTime.now().toISO(),\n  metadata: {\n    module: 'Aigent_Module_09_Enhanced',\n    version: $env.WORKFLOW_VERSION || '1.1.0',\n    handler: 'error_handler',\n    n8n_execution_id: $execution.id\n  }\n};\n\n// ============================================================================\n// PREPARE DLQ (DEAD LETTER QUEUE) ENTRY\n// ============================================================================\n// In production, add S3 node (Node 931) to persist failed events\n// for manual investigation and replay\n// ============================================================================\n\nconst dlqEntry = {\n  error_trace_id: errorTraceId,\n  occurred_at: DateTime.now().toISO(),\n  error_message: errorMessage,\n  error_type: errorType,\n  error_stage: errorStage,\n  error_stack: errorStack,\n  original_input: originalData,\n  n8n_execution_id: $execution.id\n};\n\n// ============================================================================\n// PRODUCTION EXPANSION NOTES\n// ============================================================================\n// Add AWS S3 node (Node 931) to write DLQ:\n// - Operation: Upload\n// - Bucket: $env.S3_DLQ_BUCKET or $env.S3_BUCKET\n// - File Key: `dlq/${DateTime.now().toFormat('yyyy/MM/dd')}/${errorTraceId}.json`\n// - Content: JSON.stringify(dlqEntry, null, 2)\n// - Server-Side Encryption: AES256\n// - continueOnFail: true (DLQ write should never block error response)\n// ============================================================================\n\nreturn {\n  error_response: errorResponse,\n  dlq_entry: dlqEntry,\n  http_status_code: httpStatusCode\n};"
+      },
+      "id": "node-930-error-handler",
+      "name": "930: Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 500],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.error_response }}",
+        "options": {
+          "responseCode": "={{ $json.http_status_code }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "X-Trace-ID",
+                "value": "={{ $json.error_response.trace_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-932-respond-error",
+      "name": "932: Respond - Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1450, 500]
+    }
+  ],
+  "connections": {
+    "901: Webhook - Audit Event Receiver": {
+      "main": [
+        [
+          {
+            "node": "902: Validate & Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "902: Validate & Normalize": {
+      "main": [
+        [
+          {
+            "node": "903: PHI Minimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "903: PHI Minimization": {
+      "main": [
+        [
+          {
+            "node": "904: Calculate Hash Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "904: Calculate Hash Chain": {
+      "main": [
+        [
+          {
+            "node": "905: Determine Backends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "905: Determine Backends": {
+      "main": [
+        [
+          {
+            "node": "906: Primary Storage Framework",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "906: Primary Storage Framework": {
+      "main": [
+        [
+          {
+            "node": "910: Secondary Archive Framework",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "910: Secondary Archive Framework": {
+      "main": [
+        [
+          {
+            "node": "915: Evaluate Alert Conditions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "915: Evaluate Alert Conditions": {
+      "main": [
+        [
+          {
+            "node": "917: Alert Framework",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "917: Alert Framework": {
+      "main": [
+        [
+          {
+            "node": "919: Build Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "919: Build Success Response": {
+      "main": [
+        [
+          {
+            "node": "920: Respond - Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "930: Error Handler": {
+      "main": [
+        [
+          {
+            "node": "932: Respond - Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "createdAt": "2025-10-30T00:00:00.000Z",
+      "updatedAt": "2025-10-30T00:00:00.000Z",
+      "id": "compliance",
+      "name": "Compliance & Audit"
+    },
+    {
+      "createdAt": "2025-10-30T00:00:00.000Z",
+      "updatedAt": "2025-10-30T00:00:00.000Z",
+      "id": "hipaa",
+      "name": "HIPAA"
+    },
+    {
+      "createdAt": "2025-10-30T00:00:00.000Z",
+      "updatedAt": "2025-10-30T00:00:00.000Z",
+      "id": "aigent-enhanced",
+      "name": "Aigent Enhanced v1.1"
+    }
+  ],
+  "pinData": {},
+  "versionId": "enhanced-v1.1.0",
+  "triggerCount": 1,
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "aigent-module-09-enhanced"
+  }
+}
