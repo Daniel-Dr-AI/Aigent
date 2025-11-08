@@ -7,7 +7,7 @@
         "path": "billing-payment",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
         }
       },
       "id": "webhook-trigger",
@@ -124,12 +124,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Payments'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Payments'}}",
           "mode": "name"
         },
         "columns": {
@@ -162,11 +162,11 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Add Metadata').first().json.body.customer_email }}",
         "subject": "Payment Receipt",
         "emailType": "text",
-        "message": "=Thank you for your payment!\n\nAmount: ${{ ($json.amount / 100).toFixed(2) }}\nDescription: {{ $('Add Metadata').first().json.body.description }}\nTransaction ID: {{ $json.id }}\n\nReceipt: {{ $json.receipt_url || 'Available in your Stripe dashboard' }}\n\nQuestions? Contact {{ $vars.CLINIC_PHONE }}",
+        "message": "=Thank you for your payment!\n\nAmount: ${{ ($json.amount / 100).toFixed(2) }}\nDescription: {{ $('Add Metadata').first().json.body.description }}\nTransaction ID: {{ $json.id }}\n\nReceipt: {{ $json.receipt_url || 'Available in your Stripe dashboard' }}\n\nQuestions? Contact {{ $env.CLINIC_PHONE }}",
         "options": {}
       },
       "id": "send-email",
@@ -185,7 +185,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

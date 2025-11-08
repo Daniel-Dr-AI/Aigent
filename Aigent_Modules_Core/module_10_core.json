@@ -34,7 +34,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL}}/webhook/intake-lead",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/intake-lead",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -53,7 +53,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL}}/webhook/consult-booking",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/consult-booking",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -73,7 +73,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL}}/webhook/telehealth-session",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/telehealth-session",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

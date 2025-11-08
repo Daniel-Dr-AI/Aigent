@@ -7,7 +7,7 @@
         "path": "log-event",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
         }
       },
       "id": "webhook-trigger",
@@ -15,12 +15,12 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 400],
-      "webhookId": "{{$vars.WEBHOOK_ID_M09}}",
+      "webhookId": "{{$env.WEBHOOK_ID_M09}}",
       "notes": "ENTERPRISE: Compliance audit endpoint\nCRITICAL: Central audit logging for all modules\nENDPOINT: POST /log-event\nDATA CLASSIFICATION: Audit logs - High sensitivity"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication for Audit Service\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\n// Audit service MUST have authentication\nconst apiKeyEnabled = $vars.API_KEY_ENABLED !== 'false';\nconst expectedApiKey = $vars.API_KEY || $vars.AUDIT_API_KEY;\n\nif (!expectedApiKey) {\n  return {\n    _auth_failed: true,\n    success: false,\n    error: 'Audit service requires API_KEY or AUDIT_API_KEY configuration',\n    error_code: 'AUTH_NOT_CONFIGURED',\n    timestamp: new Date().toISOString()\n  };\n}\n\nconst providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n\nif (!providedKey || providedKey !== expectedApiKey) {\n  return {\n    _auth_failed: true,\n    success: false,\n    error: 'Unauthorized: Invalid or missing audit API key',\n    error_code: 'AUTH_FAILED',\n    timestamp: new Date().toISOString()\n  };\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication for Audit Service\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\n// Audit service MUST have authentication\nconst apiKeyEnabled = $env.API_KEY_ENABLED !== 'false';\nconst expectedApiKey = $env.AUDIT_API_KEY;\n\nif (!expectedApiKey) {\n  return {\n    _auth_failed: true,\n    success: false,\n    error: 'Audit service requires API_KEY or AUDIT_API_KEY configuration',\n    error_code: 'AUTH_NOT_CONFIGURED',\n    timestamp: new Date().toISOString()\n  };\n}\n\nconst providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n\nif (!providedKey || providedKey !== expectedApiKey) {\n  return {\n    _auth_failed: true,\n    success: false,\n    error: 'Unauthorized: Invalid or missing audit API key',\n    error_code: 'AUTH_FAILED',\n    timestamp: new Date().toISOString()\n  };\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -161,8 +161,8 @@
     {
       "parameters": {
         "operation": "append",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_TAB || 'AuditLog'}}", "mode": "name"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_TAB || 'AuditLog'}}", "mode": "name"},
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -196,12 +196,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.S3_AUDIT_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.S3_AUDIT_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
             {"name": "audit_record", "value": "={{ JSON.stringify($json.audit_record) }}"},
-            {"name": "bucket", "value": "={{$vars.S3_AUDIT_BUCKET || 'aigent-audit-logs'}}"},
+            {"name": "bucket", "value": "={{$env.S3_AUDIT_BUCKET || 'aigent-audit-logs'}}"},
             {"name": "key", "value": "={{ $json.audit_record.module }}/{{ $json.audit_record.audit_timestamp.split('T')[0] }}/{{ $json.audit_record.audit_id }}.json"}
           ]
         },

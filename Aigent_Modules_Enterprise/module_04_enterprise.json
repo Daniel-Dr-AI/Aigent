@@ -6,19 +6,19 @@
         "httpMethod": "POST",
         "path": "billing-payment",
         "responseMode": "responseNode",
-        "options": {"allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"}
+        "options": {"allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"}
       },
       "id": "webhook-trigger",
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 300],
-      "webhookId": "{{$vars.WEBHOOK_ID}}",
+      "webhookId": "{{$env.WEBHOOK_ID}}",
       "notes": "ENTERPRISE: HIPAA-compliant payment processing"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -132,12 +132,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Payments'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Payments'}}",
           "mode": "name"
         },
         "columns": {
@@ -171,11 +171,11 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Normalize & Mask Data').first().json.data.customer_email }}",
-        "subject": "Payment Receipt - {{$vars.CLINIC_NAME}}",
+        "subject": "Payment Receipt - {{$env.CLINIC_NAME}}",
         "emailType": "text",
-        "message": "=Thank you for your payment!\n\n💰 Amount: ${{ ($json.amount / 100).toFixed(2) }} {{ $json.currency.toUpperCase() }}\n📋 Description: {{ $('Normalize & Mask Data').first().json.data.description }}\n🆔 Transaction ID: {{ $json.id }}\n\n📧 Receipt: {{ $json.receipt_url || 'Available in your payment dashboard' }}\n\n🔒 This payment was processed securely via Stripe.\n\nQuestions? Contact {{$vars.CLINIC_PHONE || 'us'}}\n\nThank you!",
+        "message": "=Thank you for your payment!\n\n💰 Amount: ${{ ($json.amount / 100).toFixed(2) }} {{ $json.currency.toUpperCase() }}\n📋 Description: {{ $('Normalize & Mask Data').first().json.data.description }}\n🆔 Transaction ID: {{ $json.id }}\n\n📧 Receipt: {{ $json.receipt_url || 'Available in your payment dashboard' }}\n\n🔒 This payment was processed securely via Stripe.\n\nQuestions? Contact {{$env.CLINIC_PHONE || 'us'}}\n\nThank you!",
         "options": {}
       },
       "id": "send-email",
@@ -192,7 +192,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

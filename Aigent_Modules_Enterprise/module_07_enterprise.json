@@ -7,7 +7,7 @@
         "path": "generate-report",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
         }
       },
       "id": "webhook-trigger",
@@ -15,12 +15,12 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 500],
-      "webhookId": "{{$vars.WEBHOOK_ID_M07}}",
+      "webhookId": "{{$env.WEBHOOK_ID_M07}}",
       "notes": "ENTERPRISE: Analytics report generation\nENDPOINT: POST /generate-report\nDATA CLASSIFICATION: Aggregated metrics (no individual PHI)"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      error_code: 'AUTH_FAILED',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      error_code: 'AUTH_FAILED',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -83,7 +83,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Leads", "mode": "name"},
         "options": {}
       },
@@ -99,7 +99,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Bookings", "mode": "name"},
         "options": {}
       },
@@ -115,7 +115,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Payments", "mode": "name"},
         "options": {}
       },
@@ -131,7 +131,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Campaigns", "mode": "name"},
         "options": {}
       },
@@ -148,7 +148,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Documents", "mode": "name"},
         "options": {}
       },
@@ -176,7 +176,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
+        "url": "={{$env.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -216,7 +216,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

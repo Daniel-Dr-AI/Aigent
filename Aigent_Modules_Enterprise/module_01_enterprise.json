@@ -7,7 +7,7 @@
         "path": "intake-lead",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}",
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}",
           "rawBody": false
         }
       },
@@ -16,12 +16,12 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 300],
-      "webhookId": "{{$vars.WEBHOOK_ID}}",
+      "webhookId": "{{$env.WEBHOOK_ID}}",
       "notes": "ENTERPRISE: Webhook with CORS control\nSECURITY: Set ALLOWED_ORIGINS to your domain\nCONFIG: WEBHOOK_ID for tracking"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\n// Check API key if enabled\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\n// Check API key if enabled\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -154,13 +154,13 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID || 'YOUR_SHEET_ID_HERE'}}",
+          "value": "={{$env.GOOGLE_SHEET_ID || 'YOUR_SHEET_ID_HERE'}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
           "mode": "name",
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Leads'}}"
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Leads'}}"
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -200,12 +200,12 @@
         "operation": "create",
         "base": {
           "__rl": true,
-          "value": "={{$vars.AIRTABLE_BASE_ID}}",
+          "value": "={{$env.AIRTABLE_BASE_ID}}",
           "mode": "id"
         },
         "table": {
           "__rl": true,
-          "value": "={{$vars.AIRTABLE_TABLE_NAME || 'Leads'}}",
+          "value": "={{$env.AIRTABLE_TABLE_NAME || 'Leads'}}",
           "mode": "name"
         },
         "columns": {
@@ -239,7 +239,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -270,11 +270,11 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $json.data.email }}",
         "subject": "Thank you for your inquiry!",
         "emailType": "text",
-        "message": "=Hi {{ $json.data.first_name }},\n\nThank you for contacting us regarding {{ $json.data.interest }}. We've received your information and will get back to you within 24 hours.\n\nBest regards,\n{{$vars.CLINIC_NAME || 'The Team'}}",
+        "message": "=Hi {{ $json.data.first_name }},\n\nThank you for contacting us regarding {{ $json.data.interest }}. We've received your information and will get back to you within 24 hours.\n\nBest regards,\n{{$env.CLINIC_NAME || 'The Team'}}",
         "options": {}
       },
       "id": "send-email",

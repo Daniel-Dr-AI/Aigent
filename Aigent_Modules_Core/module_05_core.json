@@ -48,7 +48,7 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $json.body.recipients[$item(0)] }}",
         "subject": "={{ $('Add Metadata').first().json.body.subject }}",
         "emailType": "text",
@@ -67,8 +67,8 @@
     {
       "parameters": {
         "operation": "append",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_TAB || 'Campaigns'}}", "mode": "name"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_TAB || 'Campaigns'}}", "mode": "name"},
         "columns": {
           "mappingMode": "defineBelow",
           "value": {

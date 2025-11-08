@@ -20,7 +20,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Leads", "mode": "name"},
         "options": {}
       },
@@ -33,7 +33,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Bookings", "mode": "name"},
         "options": {}
       },
@@ -46,7 +46,7 @@
     {
       "parameters": {
         "operation": "read",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
         "sheetName": {"__rl": true, "value": "Payments", "mode": "name"},
         "options": {}
       },
@@ -69,7 +69,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

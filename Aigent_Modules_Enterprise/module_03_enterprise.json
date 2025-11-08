@@ -7,7 +7,7 @@
         "path": "telehealth-session",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
         }
       },
       "id": "webhook-trigger",
@@ -15,12 +15,12 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 300],
-      "webhookId": "{{$vars.WEBHOOK_ID}}",
+      "webhookId": "{{$env.WEBHOOK_ID}}",
       "notes": "ENTERPRISE: HIPAA-compliant video session creation"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -126,7 +126,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.VIDEO_PLATFORM_API_URL || 'https://api.zoom.us/v2'}}/meetings",
+        "url": "={{$env.VIDEO_PLATFORM_API_URL || 'https://api.zoom.us/v2'}}/meetings",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -134,7 +134,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer {{$vars.VIDEO_PLATFORM_API_KEY || 'mock-key'}}"
+              "value": "Bearer {{$env.VIDEO_PLATFORM_API_KEY || 'mock-key'}}"
             }
           ]
         },
@@ -192,12 +192,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Sessions'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Sessions'}}",
           "mode": "name"
         },
         "columns": {
@@ -231,11 +231,11 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $json.patient_email }}",
-        "subject": "Your Telehealth Session Link - {{$vars.CLINIC_NAME}}",
+        "subject": "Your Telehealth Session Link - {{$env.CLINIC_NAME}}",
         "emailType": "text",
-        "message": "=Hi,\n\nYour secure telehealth session is ready!\n\n🔗 Join Meeting: {{ $json.patient_url }}\n\n📅 Scheduled Time: {{ $json.scheduled_start }}\n⏱️ Duration: {{ $json.duration_minutes }} minutes\n\n🔒 Security Features:\n- End-to-end encryption enabled\n- Waiting room (provider will admit you)\n\n🆔 Session ID: {{ $json.session_id.substring(0, 12).toUpperCase() }}\n\nPlease join 5 minutes early. Questions? Call {{$vars.CLINIC_PHONE}}\n\nThank you!",
+        "message": "=Hi,\n\nYour secure telehealth session is ready!\n\n🔗 Join Meeting: {{ $json.patient_url }}\n\n📅 Scheduled Time: {{ $json.scheduled_start }}\n⏱️ Duration: {{ $json.duration_minutes }} minutes\n\n🔒 Security Features:\n- End-to-end encryption enabled\n- Waiting room (provider will admit you)\n\n🆔 Session ID: {{ $json.session_id.substring(0, 12).toUpperCase() }}\n\nPlease join 5 minutes early. Questions? Call {{$env.CLINIC_PHONE}}\n\nThank you!",
         "options": {}
       },
       "id": "send-email",
@@ -252,7 +252,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

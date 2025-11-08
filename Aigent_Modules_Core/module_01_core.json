@@ -93,13 +93,13 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID || 'YOUR_SHEET_ID_HERE'}}",
+          "value": "={{$env.GOOGLE_SHEET_ID || 'YOUR_SHEET_ID_HERE'}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
           "mode": "name",
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Leads'}}"
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Leads'}}"
         },
         "columns": {
           "mappingMode": "defineBelow",
@@ -135,7 +135,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -160,7 +160,7 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $json.email }}",
         "subject": "Thank you for your inquiry!",
         "emailType": "text",

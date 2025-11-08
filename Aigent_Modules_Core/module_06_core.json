@@ -65,8 +65,8 @@
     {
       "parameters": {
         "operation": "append",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_TAB || 'Documents'}}", "mode": "name"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_TAB || 'Documents'}}", "mode": "name"},
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
