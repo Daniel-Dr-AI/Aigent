@@ -1,0 +1,610 @@
+{
+  "name": "Aigent_Global_Error_Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Workflow Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "UNIVERSAL: Catches all unhandled errors from any Aigent workflow\nTRIGGER: Automatically activated when any workflow fails\nSCOPE: Works for Core and Enterprise modules"
+    },
+    {
+      "parameters": {
+        "jsCode": "// UNIVERSAL ERROR NORMALIZATION\n// Creates standardized error object for all downstream handlers\n\nconst execution = $input.item.json.execution || {};\nconst workflow = execution.workflow || {};\nconst error = execution.error || {};\n\n// Generate trace ID for error tracking\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\nconst traceId = `ERROR-${workflow.name || 'UNKNOWN'}-${execution.id || timestamp}-${random}`;\n\n// Build standardized error object\nconst standardError = {\n  success: false,\n  trace_id: traceId,\n  timestamp: new Date().toISOString(),\n  execution: {\n    id: execution.id || 'unknown',\n    mode: execution.mode || 'unknown',\n    started_at: execution.startedAt || null,\n    stopped_at: execution.stoppedAt || new Date().toISOString()\n  },\n  workflow: {\n    id: workflow.id || 'unknown',\n    name: workflow.name || 'Unknown Workflow',\n    active: workflow.active || false\n  },\n  error: {\n    message: error.message || 'Unknown error occurred',\n    node: error.node?.name || 'Unknown Node',\n    node_type: error.node?.type || 'unknown',\n    stack: error.stack || null,\n    cause: error.cause || null,\n    context: error.context || null\n  },\n  environment: {\n    platform: 'n8n',\n    version: 'aigent-v2.0',\n    deployment: process.env.DEPLOYMENT_ENV || 'production'\n  }\n};\n\nreturn standardError;"
+      },
+      "id": "normalize-error",
+      "name": "Normalize Error Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "UNIVERSAL: Standardizes error format\nOUTPUT: Consistent JSON structure\nUSAGE: All handlers use this normalized data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "redact-check",
+              "leftValue": "={{ $env.REDACT_SENSITIVE_DATA }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-redaction",
+      "name": "Check Redaction Setting",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "notes": "SECURITY: Check if sensitive data should be redacted\nENV: REDACT_SENSITIVE_DATA=true\nPURPOSE: HIPAA, PCI-DSS, GDPR compliance"
+    },
+    {
+      "parameters": {
+        "jsCode": "// REDACT SENSITIVE DATA FROM ERROR LOGS\n// Removes tokens, passwords, PHI, PII before external transmission\n\nconst errorData = $input.item.json;\n\n// Sensitive field patterns to redact\nconst sensitivePatterns = [\n  /token/i,\n  /password/i,\n  /secret/i,\n  /apikey/i,\n  /api_key/i,\n  /bearer/i,\n  /authorization/i,\n  /ssn/i,\n  /social.?security/i,\n  /credit.?card/i,\n  /phi/i,\n  /pii/i,\n  /healthcare/i,\n  /medical.?record/i\n];\n\n// Recursive function to redact sensitive fields\nfunction redactSensitiveData(obj, depth = 0) {\n  if (depth > 10) return obj; // Prevent infinite recursion\n  \n  if (typeof obj !== 'object' || obj === null) {\n    return obj;\n  }\n  \n  if (Array.isArray(obj)) {\n    return obj.map(item => redactSensitiveData(item, depth + 1));\n  }\n  \n  const redacted = {};\n  \n  for (const [key, value] of Object.entries(obj)) {\n    // Check if key matches sensitive pattern\n    const isSensitive = sensitivePatterns.some(pattern => pattern.test(key));\n    \n    if (isSensitive) {\n      redacted[key] = '[REDACTED]';\n    } else if (typeof value === 'object' && value !== null) {\n      redacted[key] = redactSensitiveData(value, depth + 1);\n    } else if (typeof value === 'string' && value.length > 100) {\n      // Truncate very long strings (potential data dumps)\n      redacted[key] = value.substring(0, 100) + '... [TRUNCATED]';\n    } else {\n      redacted[key] = value;\n    }\n  }\n  \n  return redacted;\n}\n\nconst redactedError = redactSensitiveData(errorData);\nredactedError._redacted = true;\n\nreturn redactedError;"
+      },
+      "id": "redact-sensitive",
+      "name": "Redact Sensitive Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200],
+      "notes": "SECURITY: Removes sensitive data\nPATTERNS: tokens, passwords, PHI, PII\nCOMPLIANCE: HIPAA, GDPR, PCI-DSS"
+    },
+    {
+      "parameters": {
+        "jsCode": "// PASSTHROUGH - No redaction needed\nreturn $input.item.json;"
+      },
+      "id": "no-redaction",
+      "name": "No Redaction Needed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400],
+      "notes": "PASSTHROUGH: Original error data\nUSE CASE: Development, internal logging"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "webhook-exists",
+              "leftValue": "={{ $env.NOTIFICATION_WEBHOOK_URL }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-webhook",
+      "name": "Check Webhook Available",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300],
+      "notes": "DYNAMIC: Check if webhook notification enabled\nENV: NOTIFICATION_WEBHOOK_URL\nSKIP: If undefined, skips webhook notification"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.NOTIFICATION_WEBHOOK_URL }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ '🚨 Workflow Error: ' + $json.workflow.name }}"
+            },
+            {
+              "name": "error_data",
+              "value": "={{ $json }}"
+            },
+            {
+              "name": "trace_id",
+              "value": "={{ $json.trace_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-webhook",
+      "name": "Send Webhook Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 200],
+      "notes": "UNIVERSAL: Send to any webhook URL\nUSE: Slack, Discord, Teams, custom endpoints\nFORMAT: Generic JSON payload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "email-exists",
+              "leftValue": "={{ $env.ERROR_EMAIL_ADDRESS }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-email",
+      "name": "Check Email Available",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1340, 400],
+      "notes": "DYNAMIC: Check if email notification enabled\nENV: ERROR_EMAIL_ADDRESS\nSKIP: If undefined, skips email"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.ERROR_FROM_EMAIL || 'noreply@aigent.app' }}",
+        "toEmail": "={{ $env.ERROR_EMAIL_ADDRESS }}",
+        "subject": "={{ '🚨 Aigent Error: ' + $json.workflow.name + ' (' + $json.trace_id + ')' }}",
+        "emailType": "html",
+        "message": "={{ '<h2>Workflow Error Detected</h2>' +\n'<p><strong>Workflow:</strong> ' + $json.workflow.name + '</p>' +\n'<p><strong>Node:</strong> ' + $json.error.node + '</p>' +\n'<p><strong>Error:</strong> ' + $json.error.message + '</p>' +\n'<p><strong>Trace ID:</strong> ' + $json.trace_id + '</p>' +\n'<p><strong>Timestamp:</strong> ' + $json.timestamp + '</p>' +\n'<p><strong>Execution ID:</strong> ' + $json.execution.id + '</p>' +\n'<hr>' +\n'<p><small>Aigent Error Handler v2.0</small></p>' }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1560, 300],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP account"
+        }
+      },
+      "notes": "UNIVERSAL: Email error notification\nREQUIRES: n8n SMTP credentials\nFORMAT: HTML email with error details"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "logging-enabled",
+              "leftValue": "={{ $env.ENABLE_ERROR_LOGGING }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-logging",
+      "name": "Check Logging Enabled",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, 500],
+      "notes": "DYNAMIC: Check if error logging enabled\nENV: ENABLE_ERROR_LOGGING=true\nSKIP: If false/undefined, skips logging"
+    },
+    {
+      "parameters": {
+        "jsCode": "// DETERMINE LOGGING DESTINATION\n// Routes to Google Sheets, Database, or File based on env vars\n\nconst errorData = $input.item.json;\n\n// Check which logging destination is configured\nconst logDestinations = {\n  googleSheets: !!process.env.ERROR_LOG_SHEET_ID,\n  database: !!process.env.ERROR_DB_CONNECTION,\n  file: !!process.env.ERROR_LOG_PATH,\n  monitoring: !!process.env.MONITORING_API_URL\n};\n\n// Prepare log entry\nconst logEntry = {\n  trace_id: errorData.trace_id,\n  timestamp: errorData.timestamp,\n  workflow_name: errorData.workflow.name,\n  workflow_id: errorData.workflow.id,\n  execution_id: errorData.execution.id,\n  error_message: errorData.error.message,\n  error_node: errorData.error.node,\n  error_node_type: errorData.error.node_type,\n  deployment_env: errorData.environment.deployment,\n  redacted: errorData._redacted || false,\n  \n  // Routing info\n  _route_to: Object.keys(logDestinations).filter(k => logDestinations[k]),\n  _destinations: logDestinations\n};\n\nreturn logEntry;"
+      },
+      "id": "prepare-log",
+      "name": "Prepare Log Entry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 400],
+      "notes": "ROUTING: Determines where to log\nOPTIONS: Sheets, DB, File, Monitoring API\nFLEXIBLE: Uses whichever is configured"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "sheets-configured",
+              "leftValue": "={{ $env.ERROR_LOG_SHEET_ID }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-sheets",
+      "name": "Check Google Sheets",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 300],
+      "notes": "CONDITIONAL: Check if Sheets logging configured\nENV: ERROR_LOG_SHEET_ID\nSKIP: If undefined"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{ $env.ERROR_LOG_SHEET_ID }}",
+        "sheetName": "={{ $env.ERROR_LOG_TAB || 'ErrorLog' }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "trace_id": "={{ $json.trace_id }}",
+            "timestamp": "={{ $json.timestamp }}",
+            "workflow_name": "={{ $json.workflow_name }}",
+            "workflow_id": "={{ $json.workflow_id }}",
+            "execution_id": "={{ $json.execution_id }}",
+            "error_message": "={{ $json.error_message }}",
+            "error_node": "={{ $json.error_node }}",
+            "error_node_type": "={{ $json.error_node_type }}",
+            "deployment_env": "={{ $json.deployment_env }}",
+            "redacted": "={{ $json.redacted }}"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "log-to-sheets",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2220, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets account"
+        }
+      },
+      "notes": "OPTIONAL: Log to Google Sheets\nREQUIRES: Google Sheets credentials\nCONFIG: ERROR_LOG_SHEET_ID, ERROR_LOG_TAB"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "monitoring-configured",
+              "leftValue": "={{ $env.MONITORING_API_URL }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-monitoring",
+      "name": "Check Monitoring API",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2220, 400],
+      "notes": "CONDITIONAL: Check if monitoring API configured\nENV: MONITORING_API_URL\nUSE: Datadog, New Relic, Sentry, etc."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.MONITORING_API_URL }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "={{ 'Bearer ' + $env.MONITORING_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "send-monitoring",
+      "name": "Send to Monitoring API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 300],
+      "notes": "UNIVERSAL: Send to any monitoring service\nUSE: Datadog, Sentry, New Relic, custom\nREQUIRES: MONITORING_API_URL, MONITORING_API_KEY"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('Normalize Error Data').item.json }}",
+        "options": {
+          "responseCode": 500,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "X-Error-Trace-ID",
+                "value": "={{ $('Normalize Error Data').item.json.trace_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "return-error",
+      "name": "Return Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2440, 500],
+      "notes": "STANDARD: Returns 500 error response\nFORMAT: Standardized JSON error object\nHEADER: X-Error-Trace-ID for tracking"
+    }
+  ],
+  "connections": {
+    "Error Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Error Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Error Data": {
+      "main": [
+        [
+          {
+            "node": "Check Redaction Setting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Redaction Setting": {
+      "main": [
+        [
+          {
+            "node": "Redact Sensitive Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Redaction Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redact Sensitive Data": {
+      "main": [
+        [
+          {
+            "node": "Check Webhook Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Redaction Needed": {
+      "main": [
+        [
+          {
+            "node": "Check Webhook Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Webhook Available": {
+      "main": [
+        [
+          {
+            "node": "Send Webhook Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Email Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Webhook Notification": {
+      "main": [
+        [
+          {
+            "node": "Check Email Available",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Email Available": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Logging Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Check Logging Enabled",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Logging Enabled": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Entry": {
+      "main": [
+        [
+          {
+            "node": "Check Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Monitoring API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Check Monitoring API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Monitoring API": {
+      "main": [
+        [
+          {
+            "node": "Send to Monitoring API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Monitoring API": {
+      "main": [
+        [
+          {
+            "node": "Return Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "any",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2025-11-07T19:00:00.000Z",
+  "versionId": "global-error-handler-v2.0"
+}
