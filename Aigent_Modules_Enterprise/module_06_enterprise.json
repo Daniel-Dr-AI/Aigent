@@ -7,7 +7,7 @@
         "path": "document-process",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
         }
       },
       "id": "webhook-trigger",
@@ -15,12 +15,12 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 400],
-      "webhookId": "{{$vars.WEBHOOK_ID_M06}}",
+      "webhookId": "{{$env.WEBHOOK_ID_M06}}",
       "notes": "ENTERPRISE: Document processing webhook\nSECURITY: CORS control\nENDPOINT: POST /document-process\nDATA CLASSIFICATION: PHI - Medical documents"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      error_code: 'AUTH_FAILED',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      error_code: 'AUTH_FAILED',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -158,7 +158,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: File validation and classification\nconst metadata = $('Add Execution Metadata').first().json._metadata;\nconst body = $('Add Execution Metadata').first().json.body;\nconst fileData = $input.item.binary.data;\n\n// File size validation\nconst fileSizeBytes = fileData?.fileSize || 0;\nconst maxSizeBytes = parseInt($vars.MAX_FILE_SIZE_MB || 10) * 1024 * 1024;\n\nif (fileSizeBytes > maxSizeBytes) {\n  return {\n    _validation_error: true,\n    error: `File size ${(fileSizeBytes / 1024 / 1024).toFixed(2)}MB exceeds maximum ${$vars.MAX_FILE_SIZE_MB || 10}MB`,\n    error_code: 'FILE_TOO_LARGE'\n  };\n}\n\n// File type validation\nconst mimeType = fileData?.mimeType || '';\nconst allowedTypes = ['image/jpeg', 'image/png', 'image/tiff', 'application/pdf'];\n\nif (!allowedTypes.includes(mimeType)) {\n  return {\n    _validation_error: true,\n    error: `Unsupported file type: ${mimeType}. Allowed: JPEG, PNG, TIFF, PDF`,\n    error_code: 'INVALID_FILE_TYPE'\n  };\n}\n\n// Document type classification\nconst validDocTypes = ['id_card', 'insurance_card', 'medical_record', 'prescription', 'lab_result', 'consent_form', 'other'];\nconst docType = (body.document_type || 'other').toLowerCase();\n\n// Risk classification\nconst highRiskTypes = ['medical_record', 'lab_result', 'prescription'];\nconst riskLevel = highRiskTypes.includes(docType) ? 'high' : 'medium';\n\nreturn {\n  _metadata: metadata,\n  body: body,\n  file_info: {\n    size_bytes: fileSizeBytes,\n    size_mb: (fileSizeBytes / 1024 / 1024).toFixed(2),\n    mime_type: mimeType,\n    document_type: validDocTypes.includes(docType) ? docType : 'other',\n    risk_level: riskLevel,\n    file_url: body.file_url\n  }\n};"
+        "jsCode": "// ENTERPRISE: File validation and classification\nconst metadata = $('Add Execution Metadata').first().json._metadata;\nconst body = $('Add Execution Metadata').first().json.body;\nconst fileData = $input.item.binary.data;\n\n// File size validation\nconst fileSizeBytes = fileData?.fileSize || 0;\nconst maxSizeBytes = parseInt($env.MAX_FILE_SIZE_MB || 10) * 1024 * 1024;\n\nif (fileSizeBytes > maxSizeBytes) {\n  return {\n    _validation_error: true,\n    error: `File size ${(fileSizeBytes / 1024 / 1024).toFixed(2)}MB exceeds maximum ${$env.MAX_FILE_SIZE_MB || 10}MB`,\n    error_code: 'FILE_TOO_LARGE'\n  };\n}\n\n// File type validation\nconst mimeType = fileData?.mimeType || '';\nconst allowedTypes = ['image/jpeg', 'image/png', 'image/tiff', 'application/pdf'];\n\nif (!allowedTypes.includes(mimeType)) {\n  return {\n    _validation_error: true,\n    error: `Unsupported file type: ${mimeType}. Allowed: JPEG, PNG, TIFF, PDF`,\n    error_code: 'INVALID_FILE_TYPE'\n  };\n}\n\n// Document type classification\nconst validDocTypes = ['id_card', 'insurance_card', 'medical_record', 'prescription', 'lab_result', 'consent_form', 'other'];\nconst docType = (body.document_type || 'other').toLowerCase();\n\n// Risk classification\nconst highRiskTypes = ['medical_record', 'lab_result', 'prescription'];\nconst riskLevel = highRiskTypes.includes(docType) ? 'high' : 'medium';\n\nreturn {\n  _metadata: metadata,\n  body: body,\n  file_info: {\n    size_bytes: fileSizeBytes,\n    size_mb: (fileSizeBytes / 1024 / 1024).toFixed(2),\n    mime_type: mimeType,\n    document_type: validDocTypes.includes(docType) ? docType : 'other',\n    risk_level: riskLevel,\n    file_url: body.file_url\n  }\n};"
       },
       "id": "validate-classify-file",
       "name": "Validate & Classify Document",
@@ -196,7 +196,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
+        "url": "={{$env.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -227,8 +227,8 @@
     {
       "parameters": {
         "operation": "append",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_TAB || 'Documents'}}", "mode": "name"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_TAB || 'Documents'}}", "mode": "name"},
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -274,7 +274,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

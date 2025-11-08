@@ -6,19 +6,19 @@
         "httpMethod": "POST",
         "path": "send-message",
         "responseMode": "responseNode",
-        "options": {"allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"}
+        "options": {"allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"}
       },
       "id": "webhook-trigger",
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 500],
-      "webhookId": "{{$vars.WEBHOOK_ID_M08}}",
+      "webhookId": "{{$env.WEBHOOK_ID_M08}}",
       "notes": "ENTERPRISE: Omnichannel messaging hub\nCHANNELS: Email, SMS, WhatsApp, Telegram, Webchat\nDATA CLASSIFICATION: PHI - Patient communications"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {_auth_failed: true, success: false, error: 'Unauthorized', error_code: 'AUTH_FAILED', timestamp: new Date().toISOString()};\n  }\n}\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {_auth_failed: true, success: false, error: 'Unauthorized', error_code: 'AUTH_FAILED', timestamp: new Date().toISOString()};\n  }\n}\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -104,7 +104,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Message normalization with intent classification and PHI masking\nconst body = $input.item.json.body || {};\nconst metadata = $input.item.json._metadata;\n\nconst channel = (body.channel || 'email').toLowerCase();\nconst validChannels = ['email', 'sms', 'whatsapp', 'telegram', 'webchat'];\nconst normalizedChannel = validChannels.includes(channel) ? channel : 'email';\n\n// Intent classification\nconst message = body.message || '';\nconst messageLower = message.toLowerCase();\nlet intent = body.intent || 'general';\n\nif (!body.intent) {\n  if (messageLower.includes('urgent') || messageLower.includes('emergency')) intent = 'urgent';\n  else if (messageLower.includes('appointment') || messageLower.includes('booking')) intent = 'appointment';\n  else if (messageLower.includes('bill') || messageLower.includes('payment') || messageLower.includes('invoice')) intent = 'billing';\n  else if (messageLower.includes('help') || messageLower.includes('support')) intent = 'support';\n}\n\nconst priorityMap = {urgent: 10, appointment: 8, billing: 6, support: 5, general: 3};\nconst priority = priorityMap[intent] || 3;\n\n// XSS sanitization\nconst sanitizeMessage = (msg) => (msg || '').replace(/<script[^>]*>.*?<\\/script>/gi, '').replace(/<[^>]+>/g, '').trim();\nconst messageSanitized = sanitizeMessage(message);\n\n// PHI masking for logs\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = (phone || '').replace(/\\D/g, '');\n  return digits.length >= 4 ? '+X-XXX-XXX-' + digits.slice(-4) : '***';\n};\n\nconst recipientMasked = body.recipient.includes('@') ? maskEmail(body.recipient) : maskPhone(body.recipient);\n\nreturn {\n  _metadata: metadata,\n  data: {\n    trace_id: metadata.trace_id,\n    recipient: body.recipient,\n    channel: normalizedChannel,\n    subject: body.subject || `Message from ${$vars.CLINIC_NAME || 'Healthcare Provider'}`,\n    message: messageSanitized,\n    intent: intent,\n    priority: priority,\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  data_masked: {\n    recipient: recipientMasked,\n    channel: normalizedChannel,\n    intent: intent,\n    priority: priority,\n    message_preview: messageSanitized.substring(0, 50).replace(/[a-zA-Z]/g, 'X') + '...'\n  }\n};"
+        "jsCode": "// ENTERPRISE: Message normalization with intent classification and PHI masking\nconst body = $input.item.json.body || {};\nconst metadata = $input.item.json._metadata;\n\nconst channel = (body.channel || 'email').toLowerCase();\nconst validChannels = ['email', 'sms', 'whatsapp', 'telegram', 'webchat'];\nconst normalizedChannel = validChannels.includes(channel) ? channel : 'email';\n\n// Intent classification\nconst message = body.message || '';\nconst messageLower = message.toLowerCase();\nlet intent = body.intent || 'general';\n\nif (!body.intent) {\n  if (messageLower.includes('urgent') || messageLower.includes('emergency')) intent = 'urgent';\n  else if (messageLower.includes('appointment') || messageLower.includes('booking')) intent = 'appointment';\n  else if (messageLower.includes('bill') || messageLower.includes('payment') || messageLower.includes('invoice')) intent = 'billing';\n  else if (messageLower.includes('help') || messageLower.includes('support')) intent = 'support';\n}\n\nconst priorityMap = {urgent: 10, appointment: 8, billing: 6, support: 5, general: 3};\nconst priority = priorityMap[intent] || 3;\n\n// XSS sanitization\nconst sanitizeMessage = (msg) => (msg || '').replace(/<script[^>]*>.*?<\\/script>/gi, '').replace(/<[^>]+>/g, '').trim();\nconst messageSanitized = sanitizeMessage(message);\n\n// PHI masking for logs\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = (phone || '').replace(/\\D/g, '');\n  return digits.length >= 4 ? '+X-XXX-XXX-' + digits.slice(-4) : '***';\n};\n\nconst recipientMasked = body.recipient.includes('@') ? maskEmail(body.recipient) : maskPhone(body.recipient);\n\nreturn {\n  _metadata: metadata,\n  data: {\n    trace_id: metadata.trace_id,\n    recipient: body.recipient,\n    channel: normalizedChannel,\n    subject: body.subject || `Message from ${$env.CLINIC_NAME || 'Healthcare Provider'}`,\n    message: messageSanitized,\n    intent: intent,\n    priority: priority,\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  data_masked: {\n    recipient: recipientMasked,\n    channel: normalizedChannel,\n    intent: intent,\n    priority: priority,\n    message_preview: messageSanitized.substring(0, 50).replace(/[a-zA-Z]/g, 'X') + '...'\n  }\n};"
       },
       "id": "normalize-classify",
       "name": "Normalize & Classify Intent",
@@ -116,7 +116,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
+        "url": "={{$env.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -157,7 +157,7 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Normalize & Classify Intent').first().json.data.recipient }}",
         "subject": "={{ $('Normalize & Classify Intent').first().json.data.subject }}",
         "emailType": "text",
@@ -188,7 +188,7 @@
     {
       "parameters": {
         "operation": "send",
-        "fromPhoneNumber": "={{$vars.TWILIO_FROM_PHONE}}",
+        "fromPhoneNumber": "={{$env.TWILIO_FROM_PHONE}}",
         "toPhoneNumber": "={{ $('Normalize & Classify Intent').first().json.data.recipient }}",
         "message": "={{ $('Normalize & Classify Intent').first().json.data.message }}"
       },
@@ -217,14 +217,14 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$vars.TWILIO_ACCOUNT_SID}}/Messages.json",
+        "url": "https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_ACCOUNT_SID}}/Messages.json",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBasicAuth",
         "sendBody": true,
         "specifyBody": "formUrlEncoded",
         "bodyParameters": {
           "parameters": [
-            {"name": "From", "value": "whatsapp:{{$vars.TWILIO_WHATSAPP_FROM}}"},
+            {"name": "From", "value": "whatsapp:{{$env.TWILIO_WHATSAPP_FROM}}"},
             {"name": "To", "value": "whatsapp:{{ $('Normalize & Classify Intent').first().json.data.recipient }}"},
             {"name": "Body", "value": "={{ $('Normalize & Classify Intent').first().json.data.message }}"}
           ]
@@ -255,7 +255,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.telegram.org/bot{{$vars.TELEGRAM_BOT_TOKEN}}/sendMessage",
+        "url": "https://api.telegram.org/bot{{$env.TELEGRAM_BOT_TOKEN}}/sendMessage",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -276,7 +276,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.WEBCHAT_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.WEBCHAT_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -298,8 +298,8 @@
     {
       "parameters": {
         "operation": "append",
-        "documentId": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_ID}}", "mode": "id"},
-        "sheetName": {"__rl": true, "value": "={{$vars.GOOGLE_SHEET_TAB || 'Messages'}}", "mode": "name"},
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_TAB || 'Messages'}}", "mode": "name"},
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -337,7 +337,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

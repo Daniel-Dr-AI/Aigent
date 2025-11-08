@@ -7,7 +7,7 @@
         "path": "followup-campaign",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
         }
       },
       "id": "webhook-trigger",
@@ -15,12 +15,12 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 300],
-      "webhookId": "{{$vars.WEBHOOK_ID_M05}}",
+      "webhookId": "{{$env.WEBHOOK_ID_M05}}",
       "notes": "ENTERPRISE: Campaign webhook with CORS control\nSECURITY: Set ALLOWED_ORIGINS to your domain\nENDPOINT: POST /followup-campaign"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      error_code: 'AUTH_FAILED',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      error_code: 'AUTH_FAILED',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -193,7 +193,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Rate limit check (external cache API)\nconst metadata = $input.item.json._metadata;\nconst body = $input.item.json.body;\n\n// Check if rate limiting is enabled\nconst rateLimitEnabled = $vars.RATE_LIMIT_ENABLED === 'true';\n\nif (!rateLimitEnabled) {\n  return {\n    _metadata: metadata,\n    body: body,\n    _rate_limit_passed: true,\n    _rate_limit_checked: false\n  };\n}\n\n// Rate limit key based on client IP\nconst rateLimitKey = `campaign:${metadata.client_ip}`;\nconst maxCampaignsPerHour = parseInt($vars.MAX_CAMPAIGNS_PER_HOUR) || 10;\n\n// This would call external cache API (Redis/Upstash) to check rate limit\n// For now, we pass through - implement cache API check in production\nreturn {\n  _metadata: metadata,\n  body: body,\n  _rate_limit_passed: true,\n  _rate_limit_checked: true,\n  _rate_limit_key: rateLimitKey,\n  _rate_limit_max: maxCampaignsPerHour\n};"
+        "jsCode": "// ENTERPRISE: Rate limit check (external cache API)\nconst metadata = $input.item.json._metadata;\nconst body = $input.item.json.body;\n\n// Check if rate limiting is enabled\nconst rateLimitEnabled = $env.RATE_LIMIT_ENABLED === 'true';\n\nif (!rateLimitEnabled) {\n  return {\n    _metadata: metadata,\n    body: body,\n    _rate_limit_passed: true,\n    _rate_limit_checked: false\n  };\n}\n\n// Rate limit key based on client IP\nconst rateLimitKey = `campaign:${metadata.client_ip}`;\nconst maxCampaignsPerHour = parseInt($env.MAX_CAMPAIGNS_PER_HOUR) || 10;\n\n// This would call external cache API (Redis/Upstash) to check rate limit\n// For now, we pass through - implement cache API check in production\nreturn {\n  _metadata: metadata,\n  body: body,\n  _rate_limit_passed: true,\n  _rate_limit_checked: true,\n  _rate_limit_key: rateLimitKey,\n  _rate_limit_max: maxCampaignsPerHour\n};"
       },
       "id": "check-rate-limit",
       "name": "Check Rate Limit",
@@ -216,7 +216,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
+        "url": "={{$env.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -310,7 +310,7 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Normalize & Mask Data').first().json.data.recipients[$itemIndex] }}",
         "subject": "={{ $('Normalize & Mask Data').first().json.data.subject }}",
         "emailType": "text",
@@ -330,7 +330,7 @@
     {
       "parameters": {
         "operation": "send",
-        "fromPhoneNumber": "={{$vars.TWILIO_FROM_PHONE}}",
+        "fromPhoneNumber": "={{$env.TWILIO_FROM_PHONE}}",
         "toPhoneNumber": "={{ $('Normalize & Mask Data').first().json.data.recipients[$itemIndex] }}",
         "message": "={{ $('Normalize & Mask Data').first().json.data.message }}",
         "options": {}
@@ -350,12 +350,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Campaigns'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Campaigns'}}",
           "mode": "name"
         },
         "columns": {
@@ -399,7 +399,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -430,7 +430,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

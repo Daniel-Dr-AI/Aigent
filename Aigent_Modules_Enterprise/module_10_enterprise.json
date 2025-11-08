@@ -6,19 +6,19 @@
         "httpMethod": "POST",
         "path": "orchestrate",
         "responseMode": "responseNode",
-        "options": {"allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"}
+        "options": {"allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"}
       },
       "id": "webhook-trigger",
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 600],
-      "webhookId": "{{$vars.WEBHOOK_ID_M10}}",
+      "webhookId": "{{$env.WEBHOOK_ID_M10}}",
       "notes": "ENTERPRISE: Master orchestration endpoint\nWORKFLOWS: patient-journey, document-workflow, campaign-workflow\nROLE: Coordinates Modules 01-09"
     },
     {
       "parameters": {
-        "jsCode": "const input = $input.item.json;\nconst headers = input.headers || {};\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {_auth_failed: true, success: false, error: 'Unauthorized', error_code: 'AUTH_FAILED', timestamp: new Date().toISOString()};\n  }\n}\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "const input = $input.item.json;\nconst headers = input.headers || {};\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {_auth_failed: true, success: false, error: 'Unauthorized', error_code: 'AUTH_FAILED', timestamp: new Date().toISOString()};\n  }\n}\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -116,7 +116,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/intake-lead",
+        "url": "={{$env.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/intake-lead",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -141,7 +141,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/consult-booking",
+        "url": "={{$env.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/consult-booking",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -165,7 +165,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/telehealth-session",
+        "url": "={{$env.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/telehealth-session",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -201,7 +201,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/document-process",
+        "url": "={{$env.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/document-process",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -237,7 +237,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/followup-campaign",
+        "url": "={{$env.N8N_BASE_URL || 'http://localhost:5678'}}/webhook/followup-campaign",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -272,7 +272,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
+        "url": "={{$env.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -300,7 +300,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [

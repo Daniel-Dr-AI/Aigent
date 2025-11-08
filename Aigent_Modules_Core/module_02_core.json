@@ -85,7 +85,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// CORE: Normalize booking data\nconst body = $input.item.json.body || {};\n\nreturn {\n  trace_id: $input.item.json.trace_id,\n  email: (body.email || '').toLowerCase().trim(),\n  name: (body.name || '').trim(),\n  phone: (body.phone || '').replace(/\\D/g, ''),\n  phone_display: body.phone || '',\n  service_type: body.service_type || 'Consultation',\n  preferred_date: body.preferred_date || null,\n  preferred_time: body.preferred_time || null,\n  timezone: body.timezone || $vars.CLINIC_TIMEZONE || 'America/New_York',\n  notes: body.notes || '',\n  timestamp: $input.item.json.timestamp\n};"
+        "jsCode": "// CORE: Normalize booking data\nconst body = $input.item.json.body || {};\n\nreturn {\n  trace_id: $input.item.json.trace_id,\n  email: (body.email || '').toLowerCase().trim(),\n  name: (body.name || '').trim(),\n  phone: (body.phone || '').replace(/\\D/g, ''),\n  phone_display: body.phone || '',\n  service_type: body.service_type || 'Consultation',\n  preferred_date: body.preferred_date || null,\n  preferred_time: body.preferred_time || null,\n  timezone: body.timezone || $env.CLINIC_TIMEZONE || 'America/New_York',\n  notes: body.notes || '',\n  timestamp: $input.item.json.timestamp\n};"
       },
       "id": "normalize-data",
       "name": "Normalize Data",
@@ -97,7 +97,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$vars.SCHEDULING_API_URL || 'https://httpbin.org/get'}}",
+        "url": "={{$env.SCHEDULING_API_URL || 'https://httpbin.org/get'}}",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -107,7 +107,7 @@
             },
             {
               "name": "duration",
-              "value": "={{$vars.DEFAULT_APPOINTMENT_DURATION || 30}}"
+              "value": "={{$env.DEFAULT_APPOINTMENT_DURATION || 30}}"
             }
           ]
         },
@@ -156,7 +156,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.SCHEDULING_API_URL || 'https://httpbin.org/post'}}/bookings",
+        "url": "={{$env.SCHEDULING_API_URL || 'https://httpbin.org/post'}}/bookings",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -212,12 +212,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Bookings'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Bookings'}}",
           "mode": "name"
         },
         "columns": {
@@ -250,7 +250,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -275,11 +275,11 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Normalize Data').first().json.email }}",
         "subject": "Appointment Confirmed",
         "emailType": "text",
-        "message": "=Hi {{ $('Normalize Data').first().json.name }},\n\nYour appointment has been confirmed!\n\nService: {{ $('Normalize Data').first().json.service_type }}\nDate & Time: {{ $('Select Slot').first().json.slot_time }}\nLocation: {{ $vars.CLINIC_NAME }}\n\nConfirmation: {{ $('Normalize Data').first().json.trace_id }}\n\nQuestions? Call {{ $vars.CLINIC_PHONE }}\n\nThank you!",
+        "message": "=Hi {{ $('Normalize Data').first().json.name }},\n\nYour appointment has been confirmed!\n\nService: {{ $('Normalize Data').first().json.service_type }}\nDate & Time: {{ $('Select Slot').first().json.slot_time }}\nLocation: {{ $env.CLINIC_NAME }}\n\nConfirmation: {{ $('Normalize Data').first().json.trace_id }}\n\nQuestions? Call {{ $env.CLINIC_PHONE }}\n\nThank you!",
         "options": {}
       },
       "id": "send-email",

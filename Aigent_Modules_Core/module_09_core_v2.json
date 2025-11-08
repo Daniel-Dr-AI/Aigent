@@ -7,7 +7,7 @@
         "path": "log-event",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
         }
       },
       "id": "webhook",
@@ -80,12 +80,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'AuditLog'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'AuditLog'}}",
           "mode": "name"
         },
         "columns": {

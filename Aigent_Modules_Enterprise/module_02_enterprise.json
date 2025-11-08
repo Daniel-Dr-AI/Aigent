@@ -7,7 +7,7 @@
         "path": "consult-booking",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || '*'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
         }
       },
       "id": "webhook-trigger",
@@ -15,12 +15,12 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 300],
-      "webhookId": "{{$vars.WEBHOOK_ID}}",
+      "webhookId": "{{$env.WEBHOOK_ID}}",
       "notes": "ENTERPRISE: Webhook with CORS control\nSECURITY: Set ALLOWED_ORIGINS to your domain"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $vars.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $vars.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
       },
       "id": "auth-check",
       "name": "API Key Authentication",
@@ -164,7 +164,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Data normalization with PHI masking\nconst body = $input.item.json.body || {};\nconst metadata = $input.item.json._metadata;\n\n// Normalize data\nconst nameParts = (body.name || '').trim().split(/\\s+/).filter(p => p.length > 0);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';\n\nconst phoneNormalized = (body.phone || '').replace(/\\D/g, '');\nconst phoneDisplay = body.phone || '';\nconst emailNormalized = (body.email || '').toLowerCase().trim();\n\n// PHI masking functions\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***' + (local[local.length-1] || '') + '@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = phone.replace(/\\D/g, '');\n  if (digits.length < 4) return '***';\n  return '+X-XXX-XXX-' + digits.slice(-4);\n};\n\nconst maskName = (name) => {\n  if (!name) return '';\n  const parts = name.split(/\\s+/);\n  return parts.map(p => p[0] + '***').join(' ');\n};\n\nreturn {\n  _metadata: metadata,\n  data: {\n    trace_id: metadata.trace_id,\n    name: body.name,\n    first_name: firstName,\n    last_name: lastName,\n    email: emailNormalized,\n    phone: phoneNormalized,\n    phone_display: phoneDisplay,\n    service_type: body.service_type || 'Consultation',\n    preferred_date: body.preferred_date || null,\n    preferred_time: body.preferred_time || null,\n    timezone: body.timezone || $vars.CLINIC_TIMEZONE || 'America/New_York',\n    notes: body.notes || '',\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  data_masked: {\n    name: maskName(body.name),\n    email: maskEmail(emailNormalized),\n    phone: maskPhone(phoneDisplay),\n    service_type: body.service_type || 'Consultation'\n  }\n};"
+        "jsCode": "// ENTERPRISE: Data normalization with PHI masking\nconst body = $input.item.json.body || {};\nconst metadata = $input.item.json._metadata;\n\n// Normalize data\nconst nameParts = (body.name || '').trim().split(/\\s+/).filter(p => p.length > 0);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';\n\nconst phoneNormalized = (body.phone || '').replace(/\\D/g, '');\nconst phoneDisplay = body.phone || '';\nconst emailNormalized = (body.email || '').toLowerCase().trim();\n\n// PHI masking functions\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***' + (local[local.length-1] || '') + '@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = phone.replace(/\\D/g, '');\n  if (digits.length < 4) return '***';\n  return '+X-XXX-XXX-' + digits.slice(-4);\n};\n\nconst maskName = (name) => {\n  if (!name) return '';\n  const parts = name.split(/\\s+/);\n  return parts.map(p => p[0] + '***').join(' ');\n};\n\nreturn {\n  _metadata: metadata,\n  data: {\n    trace_id: metadata.trace_id,\n    name: body.name,\n    first_name: firstName,\n    last_name: lastName,\n    email: emailNormalized,\n    phone: phoneNormalized,\n    phone_display: phoneDisplay,\n    service_type: body.service_type || 'Consultation',\n    preferred_date: body.preferred_date || null,\n    preferred_time: body.preferred_time || null,\n    timezone: body.timezone || $env.CLINIC_TIMEZONE || 'America/New_York',\n    notes: body.notes || '',\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  data_masked: {\n    name: maskName(body.name),\n    email: maskEmail(emailNormalized),\n    phone: maskPhone(phoneDisplay),\n    service_type: body.service_type || 'Consultation'\n  }\n};"
       },
       "id": "normalize-data",
       "name": "Normalize & Mask Data",
@@ -176,7 +176,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$vars.SCHEDULING_API_URL || 'https://httpbin.org/get'}}",
+        "url": "={{$env.SCHEDULING_API_URL || 'https://httpbin.org/get'}}",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -186,7 +186,7 @@
             },
             {
               "name": "duration",
-              "value": "={{$vars.DEFAULT_APPOINTMENT_DURATION || 30}}"
+              "value": "={{$env.DEFAULT_APPOINTMENT_DURATION || 30}}"
             },
             {
               "name": "service_type",
@@ -209,7 +209,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Intelligent slot selection\nconst slots = $input.first().json.slots || [];\nconst normalizedData = $('Normalize & Mask Data').first().json.data;\nconst preferredTime = normalizedData.preferred_time;\n\nif (slots.length === 0) {\n  return { \n    error: true, \n    message: 'No available appointments',\n    retry_after: new Date(Date.now() + 86400000).toISOString()\n  };\n}\n\n// If preferred time specified, try to match\nlet selected = slots[0]; // default to first\n\nif (preferredTime) {\n  const preferred = slots.find(s => {\n    const slotTime = (s.time || s.start || '').substring(11, 16); // Extract HH:MM\n    return slotTime === preferredTime;\n  });\n  if (preferred) {\n    selected = preferred;\n  }\n}\n\nreturn {\n  slot_time: selected.time || selected.start,\n  slot_id: selected.id || selected.time,\n  duration: selected.duration || parseInt($vars.DEFAULT_APPOINTMENT_DURATION) || 30,\n  preference_matched: preferredTime && selected.time?.includes(preferredTime)\n};"
+        "jsCode": "// ENTERPRISE: Intelligent slot selection\nconst slots = $input.first().json.slots || [];\nconst normalizedData = $('Normalize & Mask Data').first().json.data;\nconst preferredTime = normalizedData.preferred_time;\n\nif (slots.length === 0) {\n  return { \n    error: true, \n    message: 'No available appointments',\n    retry_after: new Date(Date.now() + 86400000).toISOString()\n  };\n}\n\n// If preferred time specified, try to match\nlet selected = slots[0]; // default to first\n\nif (preferredTime) {\n  const preferred = slots.find(s => {\n    const slotTime = (s.time || s.start || '').substring(11, 16); // Extract HH:MM\n    return slotTime === preferredTime;\n  });\n  if (preferred) {\n    selected = preferred;\n  }\n}\n\nreturn {\n  slot_time: selected.time || selected.start,\n  slot_id: selected.id || selected.time,\n  duration: selected.duration || parseInt($env.DEFAULT_APPOINTMENT_DURATION) || 30,\n  preference_matched: preferredTime && selected.time?.includes(preferredTime)\n};"
       },
       "id": "select-slot",
       "name": "Select Best Slot",
@@ -239,7 +239,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.SCHEDULING_API_URL || 'https://httpbin.org/post'}}/bookings",
+        "url": "={{$env.SCHEDULING_API_URL || 'https://httpbin.org/post'}}/bookings",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -295,12 +295,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Bookings'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Bookings'}}",
           "mode": "name"
         },
         "columns": {
@@ -337,12 +337,12 @@
         "operation": "create",
         "base": {
           "__rl": true,
-          "value": "={{$vars.AIRTABLE_BASE_ID}}",
+          "value": "={{$env.AIRTABLE_BASE_ID}}",
           "mode": "id"
         },
         "table": {
           "__rl": true,
-          "value": "={{$vars.AIRTABLE_TABLE_NAME || 'Bookings'}}",
+          "value": "={{$env.AIRTABLE_TABLE_NAME || 'Bookings'}}",
           "mode": "name"
         },
         "columns": {
@@ -374,7 +374,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -401,11 +401,11 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Normalize & Mask Data').first().json.data.email }}",
-        "subject": "Appointment Confirmed - {{$vars.CLINIC_NAME}}",
+        "subject": "Appointment Confirmed - {{$env.CLINIC_NAME}}",
         "emailType": "text",
-        "message": "=Hi {{ $('Normalize & Mask Data').first().json.data.first_name }},\n\nYour appointment has been confirmed!\n\n📅 Service: {{ $('Normalize & Mask Data').first().json.data.service_type }}\n🕐 Date & Time: {{ $('Select Best Slot').first().json.slot_time }}\n⏱️ Duration: {{ $('Select Best Slot').first().json.duration }} minutes\n📍 Location: {{$vars.CLINIC_NAME || 'Our Office'}}\n\n🎟️ Confirmation Number: {{ $('Normalize & Mask Data').first().json.data.trace_id.substring(0, 8).toUpperCase() }}\n\nQuestions? Call us at {{$vars.CLINIC_PHONE || '555-0000'}}\n\nThank you!",
+        "message": "=Hi {{ $('Normalize & Mask Data').first().json.data.first_name }},\n\nYour appointment has been confirmed!\n\n📅 Service: {{ $('Normalize & Mask Data').first().json.data.service_type }}\n🕐 Date & Time: {{ $('Select Best Slot').first().json.slot_time }}\n⏱️ Duration: {{ $('Select Best Slot').first().json.duration }} minutes\n📍 Location: {{$env.CLINIC_NAME || 'Our Office'}}\n\n🎟️ Confirmation Number: {{ $('Normalize & Mask Data').first().json.data.trace_id.substring(0, 8).toUpperCase() }}\n\nQuestions? Call us at {{$env.CLINIC_PHONE || '555-0000'}}\n\nThank you!",
         "options": {}
       },
       "id": "send-email",

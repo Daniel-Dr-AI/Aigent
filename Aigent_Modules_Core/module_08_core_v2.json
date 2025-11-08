@@ -7,7 +7,7 @@
         "path": "send-message",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
         }
       },
       "id": "webhook",
@@ -98,9 +98,9 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Add Metadata').first().json.body.recipient }}",
-        "subject": "Message from {{ $vars.CLINIC_NAME }}",
+        "subject": "Message from {{ $env.CLINIC_NAME }}",
         "emailType": "text",
         "message": "={{ $('Add Metadata').first().json.body.message }}"
       },
@@ -118,7 +118,7 @@
     {
       "parameters": {
         "operation": "send",
-        "from": "={{$vars.TWILIO_FROM_NUMBER || '+15551234567'}}",
+        "from": "={{$env.TWILIO_FROM_NUMBER || '+15551234567'}}",
         "to": "={{ $('Add Metadata').first().json.body.recipient }}",
         "message": "={{ $('Add Metadata').first().json.body.message }}"
       },
@@ -138,12 +138,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Messages'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Messages'}}",
           "mode": "name"
         },
         "columns": {

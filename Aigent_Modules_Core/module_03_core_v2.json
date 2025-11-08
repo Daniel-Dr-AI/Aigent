@@ -7,7 +7,7 @@
         "path": "telehealth-session",
         "responseMode": "responseNode",
         "options": {
-          "allowedOrigins": "={{$vars.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
         }
       },
       "id": "webhook-trigger",
@@ -75,7 +75,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.VIDEO_PLATFORM_API_URL || 'https://api.zoom.us/v2'}}/meetings",
+        "url": "={{$env.VIDEO_PLATFORM_API_URL || 'https://api.zoom.us/v2'}}/meetings",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
@@ -83,7 +83,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer {{$vars.VIDEO_PLATFORM_API_KEY || 'mock-key'}}"
+              "value": "Bearer {{$env.VIDEO_PLATFORM_API_KEY || 'mock-key'}}"
             }
           ]
         },
@@ -146,12 +146,12 @@
         "operation": "append",
         "documentId": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_ID}}",
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
           "mode": "id"
         },
         "sheetName": {
           "__rl": true,
-          "value": "={{$vars.GOOGLE_SHEET_TAB || 'Sessions'}}",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Sessions'}}",
           "mode": "name"
         },
         "columns": {
@@ -184,11 +184,11 @@
     {
       "parameters": {
         "operation": "send",
-        "fromEmail": "={{$vars.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $json.patient_email }}",
         "subject": "Your Telehealth Session Link",
         "emailType": "text",
-        "message": "=Hi,\n\nYour telehealth session is scheduled!\n\nJoin Meeting: {{ $json.patient_url }}\n\nScheduled Time: {{ $json.scheduled_start }}\nDuration: {{ $json.duration_minutes }} minutes\n\nSession ID: {{ $json.session_id }}\n\nPlease join on time. Questions? Contact {{ $vars.CLINIC_PHONE }}\n\nThank you!",
+        "message": "=Hi,\n\nYour telehealth session is scheduled!\n\nJoin Meeting: {{ $json.patient_url }}\n\nScheduled Time: {{ $json.scheduled_start }}\nDuration: {{ $json.duration_minutes }} minutes\n\nSession ID: {{ $json.session_id }}\n\nPlease join on time. Questions? Contact {{ $env.CLINIC_PHONE }}\n\nThank you!",
         "options": {}
       },
       "id": "send-email",
@@ -208,7 +208,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
