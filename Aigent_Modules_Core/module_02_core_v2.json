@@ -22,7 +22,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// CORE V2: Enhanced metadata\nconst body = $input.item.json.body || {};\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `BOOK-${timestamp}-${random}`,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// CORE V2: Enhanced metadata with body unwrapper\n// FIXES: Double-body wrapping issue from PowerShell/n8n HTTP nodes\n// Handles: { body: { body: {...} } }, { body: {...} }, and unwrapped {...}\nfunction unwrapBody(input) {\n  // Check for double-wrapped: { body: { body: {...} } }\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  // Check for single-wrapped: { body: {...} }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  // Unwrapped: { name: \"...\", email: \"...\" }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `BOOK-${timestamp}-${random}`,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "add-metadata",
       "name": "Add Metadata",
@@ -32,11 +32,11 @@
         400,
         300
       ],
-      "notes": "CORE: Basic trace ID only"
+      "notes": "CORE V2: Trace ID + Body Unwrapper\nFIXES: Double-body JSON wrapping from PowerShell/n8n\nSUPPORTS: Wrapped, double-wrapped, and unwrapped formats"
     },
     {
       "parameters": {
-        "jsCode": "// CORE V2: Pre-validation to prevent IF node .length expression bug\n// This node validates all fields and returns a validation result\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Required field checks with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length > 100) {\n  errors.push('name_length');\n}\n\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n} else if (body.email.length > 255) {\n  errors.push('email_length');\n}\n\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n}\n\nif (!body.service_type || typeof body.service_type !== 'string' || body.service_type.trim() === '') {\n  errors.push('service_type');\n} else if (!/^(Consultation|Therapy|Assessment|Follow-up|General)$/.test(body.service_type)) {\n  errors.push('service_type_invalid');\n}\n\n// Return validation result\nreturn {\n  body: body,\n  trace_id: $input.item.json.trace_id,\n  timestamp: $input.item.json.timestamp,\n  valid: errors.length === 0,\n  errors: errors\n};"
+        "jsCode": "// CORE V2: Pre-validation to prevent IF node .length expression bug\n// This node validates all fields and returns a validation result\n// UPDATED: Uses metadata node's already-unwrapped body\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Required field checks with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length > 100) {\n  errors.push('name_length');\n}\n\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n} else if (body.email.length > 255) {\n  errors.push('email_length');\n}\n\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n}\n\nif (!body.service_type || typeof body.service_type !== 'string' || body.service_type.trim() === '') {\n  errors.push('service_type');\n} else if (!/^(Consultation|Therapy|Assessment|Follow-up|General)$/.test(body.service_type)) {\n  errors.push('service_type_invalid');\n}\n\n// Return validation result\nreturn {\n  body: body,\n  trace_id: $input.item.json.trace_id,\n  timestamp: $input.item.json.timestamp,\n  valid: errors.length === 0,\n  errors: errors\n};"
       },
       "id": "pre-validation",
       "name": "Pre-Validation",

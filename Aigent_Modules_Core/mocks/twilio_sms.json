@@ -1,0 +1,13 @@
+{
+  "sid": "SM_mock_twilio_1234567890",
+  "message_id": "SM_mock_twilio_1234567890",
+  "date_created": "2025-11-09T12:00:00Z",
+  "date_sent": "2025-11-09T12:00:01Z",
+  "from": "+15551234567",
+  "to": "+15559876543",
+  "body": "Mock SMS message content",
+  "status": "sent",
+  "direction": "outbound-api",
+  "price": "-0.0075",
+  "price_unit": "USD"
+}

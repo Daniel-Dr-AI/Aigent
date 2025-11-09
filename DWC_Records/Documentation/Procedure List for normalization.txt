@@ -1,0 +1,1141 @@
+================================================================================
+DISTINCT PROCEDURES AND DESCRIPTIONS FROM PATIENT RESEARCH REPORTS
+Extracted from Columns O (Procedure) and P (Description)
+================================================================================
+
+Total Distinct Procedures: 377
+
+Format: PROCEDURE -> Description(s)
+Note: Multiple descriptions indicate variations found in the data
+
+
+# 21
+  # 21 of Natural Image
+
+#14
+  #14 pills of a #60 count bottle
+
+#14 of 30
+  two week trial of the #30 count med
+
+#23
+  # 23 of any giving script
+
+#46
+  #46 balance of #60
+
+#7
+  #7  of any giving script
+
+07 diet 75
+  Diethylpropion 75 with 10 charge
+
+07-6 nat
+  6 month of natural program with 07 price
+
+1 MONTH
+  ONE MONTH PLAN
+
+1 lipo
+  lipo shot with program
+
+1 month +
+  1 month + 4 extra injections
+
+1 month 2
+  natural program with 2 shots a week
+
+1 of 1
+  1st refill of a 1 month plan
+
+1 of 12
+  1st refill of a year plan
+
+1 of 2
+  1st refill of a 2 month plan
+
+1 of 3
+  1st refill of a 3 month plan
+
+1 of 4
+  1st refill of a 4 month plan
+
+1 of 5
+  1 of 5 months program
+
+1 of 6
+  1st refill of a 6 month plan
+
+1 week
+  weekly plans
+
+1 year
+  1 year-includes 1st visit & 3 follow ups
+
+10 of 12
+  10th refill of a year plan
+
+105 PHEN 1
+  PHENDIMETRAZINE 105 W/PROGRAM
+
+105 PHEN 2
+  PHENDIMETRAZINE 105 PRESCRIPTION
+
+11 of 12
+  11th refill of a year plan
+
+12 of 12
+  12th refill of a year plan
+
+12trzlipo
+  tirzepatide months 1&2 purchased together with 8 lipo shots
+
+18
+  Raspberry Ketone #21
+
+19
+  Q10 120
+
+1month
+  One month basic monthly program
+
+1sgtlipo
+  semaglutide 1 month with 4 lipo shots
+
+2 MO EXTRA
+  2 month program with extra wkly injectio
+
+2 MONTH
+  TWO MONTH PLAN
+
+2 Natural
+  2 month of natural programs
+
+2 for 1
+  pre paid for 2 for 1 shows
+
+2 month +
+  2 MONTH NATURAL PLAN EXTRA SHOTS
+
+2 month 2
+  2 month natural program 2 shots a week
+
+2 of 12
+  2nd refill of a year plan
+
+2 of 2
+  2nd refill of a 2 month plan
+
+2 of 3
+  2nd refill of a 3 month plan
+
+2 of 4
+  2nd refill of a 4 month plan
+
+2 of 6
+  2nd refill of a 6 month plan
+
+21
+  2 month without lipo
+
+25 DIET 1
+  Diethylpropion 25 w/Program
+
+25 DIET 2
+  Diethylpropion 25 RX Only
+
+2monthsgt
+  semaglutide 2months
+
+2natural+
+  2 month plan / Natural  2 shots
+
+2sgtlipo
+  semaglutide 2 months with 8 lipo shots
+
+3 MONTH
+  THREE MONTH PLAN
+
+3 Month +
+  3 month natural  plan w/ extra shots
+
+3 Natural
+  3 months of natural program
+
+3 mo no sh
+  3 month of program with no injections
+
+3 month 2
+  3 months natrual program 2 shot a week
+
+3 month fo
+  3 month follow up
+
+3 of 12
+  3rd refill of a year plan
+
+3 of 3
+  3rd of a 3 month plan
+
+3 of 4
+  3rd refill of a 4 month plan
+
+3 of 6
+  3rd refill of a 6 month plan
+
+30 PHEN 1
+  Phentermine 30 mg W/Program
+
+30 PHEN 2
+  Phentermine 30 mg Charge
+
+35
+  prescription for Phen 35
+
+35 PHEN 1
+  PHENDIMETRAZINE 35 W/ PROGRAM
+
+35 phen
+  phendimetrazine 35 only
+
+37
+  phentermine 37.5
+
+37.5 P 15
+  Phentermine 37.5 mg (15) W/Program
+
+37.5 P 30
+  Phentermine 37.5 mg (30) W/Program
+
+37.5 P 45
+  Phentermine 37.5 mg (45) W/Program
+
+37.5 PHEN
+  PHENTERMINE 37.5 PRESCRIPTION ONLY
+
+37.5capchg
+  Phentermine 37.5mg Caps Charge
+
+375 caps
+  Phentermine 37.5 mg Caps
+
+3monthsgt
+  semaglutide 3 months
+
+3sgtlipo
+  semaglutide 3 months with 12 lipo shots
+
+3trzlipo
+  tirzepatide month 3 with 4 lipo shots
+
+4 lipo
+  one month of lipo shots (4)
+
+4 month
+  4 mo. program w/1st visit & 1 f/u
+
+4 month +
+  4 month natural plan with extra shots
+
+4 natural
+  4 months of natural program
+
+4 of 12
+  4th refill of a year plan
+
+4 of 4
+  4th refill of a 4 month plan
+
+4 of 6
+  4th refill of a 6 month plan
+
+4-herb
+  Essiac Extract 4 Herb Formula
+
+405
+  Collagen Eye Defense
+
+4monthsgt
+  semaglutide 4 months
+
+5
+  Chitosan
+
+5 of 12
+  5th refill of a year plan
+
+5 of 5
+  fifth of five month plan
+
+5 of 6
+  5th refill of a 6 month plan
+
+6
+  4 Herb Essiac Tea
+
+6 month
+  6 mo.program includes 1st visit & 1 F/U910
+
+6 natural
+  6 month of natural program
+
+6 of 12
+  6th refill of a year plan
+
+6 of 6
+  6th refill of a 6 month plan
+
+6monthsgt
+  semaglutide 6 months
+
+7 of 12
+  7th refill of a year plan
+
+75 DIET 1
+  Diethylproprion 75 w/program
+
+75 DIET 2
+  Diethylpropion 75 RX only
+
+8 of 12
+  8th refill of a year plan
+
+9
+  CoEnzyme Q10
+
+9 of 12
+  9th refill of a year plan
+
+97010
+  HOT/CLD PKS
+
+97110
+  Range of Motion
+
+97112
+  NMT
+
+97122
+  THERAP 1/> AREAS/15 MIN; MAN TRACTN
+
+97124
+  Trigger Point Therapy
+
+97140
+  Manual therapy
+
+99215
+  Office Visit established
+
+99241
+  office consutation problem focused
+
+AMOX #30
+  Amoxicillin 500mg #30 (Adults)
+
+Add RX
+  Additional RX added to program
+
+Adrenal
+  Adrenal 160
+
+All 4
+  Took monthly inj home
+
+All Oil
+  Allergy Bomb Oils
+
+B12
+  B-12 Injection
+
+BASIC WO
+  BASIC MONTHLY PRO W/OUT LIPO
+
+BC Bracele
+  Breast Cancer Bracelet
+
+BP Check
+  Blood Pressure Check
+
+Bad Check
+  Bad Check returned
+
+BlueLizard
+  Blue Lizard Sunscreen 5oz bottle
+
+CHITOSAN
+  Chitosan-Dietary Supplement
+
+CL FOR MV
+  EXCHANGE CLEANSE FOR MUTIVITAMIN
+
+CLEANSE
+  CLEANSE PAID
+
+CPC Red
+  Small Red CPC Vitamins
+
+CPC vit
+  peach CPC
+
+Cascara
+  Cascara Sagrada #30
+
+Cholest
+  Cholesterid Tea
+
+Cholest.T
+  Chosterid Tea
+
+Classic
+  Classic
+
+CoQ10
+  CoEnzyme Q10
+
+Consult
+  Free Consultation
+
+Cpc vitam
+  Cpc Red Vitamins
+
+Detox Tea
+  Detox Tea
+
+Diet Tea
+  Dieters Green Tea
+
+Eat This
+  Eat This, Not That
+
+FFL
+  Fit for life paid
+
+Fill 75
+  Fill 75
+
+Fish Oil
+  Omega-3 Fish Oil (Proform)
+
+Fit
+  Fit for life with program
+
+Focus oil
+  Focus Blend Oils
+
+Ginger Tea
+  Ginger Tea
+
+Gluco
+  Glucobetic
+
+HCTZ
+  Hydrochlorothiazide 25 mg w/ program
+
+HCTZ12.5mg
+  Hydrochlorothiazide 12.5mg
+
+HOODIA
+  Hoodia Plus Product
+
+Hctz pd
+  Hydrochlorothiazide Paid
+
+Honey
+  Honey-Local
+
+Hoodia w/p
+  Hoodia Plus with Program
+
+Horny Goat
+  Horny Goat Weed Tea
+
+Jasmine
+  Jasmine Tea
+
+Ketones
+  Raspberry Ketones with program
+
+Kozy Back
+  Kozy Back Pac
+
+Kozy Feet
+  Kozy Feet
+
+Kozy knee
+  Kozy Knee Pac
+
+Krill
+  Krill oil
+
+LIPO 1
+  INDIVIDUAL LIPO INJECTION
+
+LIPO 2
+  LIPO INJ ONLY-NO PROGRAM
+
+Lav.Butter
+  Natures Treatment Lavender Shea Butter
+
+Laxative T
+  Laxative Tea
+
+MAIN 1
+  MAIN PRO 1/2 MED, PLUS NIP,NIC,MV
+
+MULTI
+  Multi-Vitamin with Minerals Paid
+
+MV
+  Multivitamin & Mineral Formula
+
+Main1 Plus
+  Maintenance Program Plus 4 extra inj.
+
+Make up
+  Make up shot missed
+
+Med Change
+  Change of Prescription Medication
+
+Memory
+  Memory
+
+Misc
+  miscellaneous
+
+Misc.
+  Miscellaneous
+
+NATURAL 1
+  NATURAL PRO ONLY + LIPO
+
+NATURAL 2
+  NATURAL PRO  W/LIPO 2 month
+
+NI
+  Natural Image
+
+NIC
+  CLEANSE WITH PROGRAM
+
+NIP
+  Weight Loss  Plus
+
+NP-PPD
+  New Patient Prepayment
+
+NT small
+  Nature's Treatment (small)
+
+Nat Im
+  Natural Image Paid
+
+Nat week
+  one week of natural image
+
+Natural Pl
+  Natural Program Plus 2 injections/week
+
+Nature 16
+  Nature Treatment 16oz + tax
+
+Nature 8
+  Natures Treatment 8oz + tax
+
+Oil 4
+  Nature's Treatment Massage Oil 4 oz.
+
+Oil 8
+  Nature's Treatment Massage Oil 8 oz.
+
+Online 2
+  Online Purchase 2 month
+
+Online 3
+  Online Purchase 3 month
+
+PLUS
+  Weight Loss Plus/Natural Image
+
+Problem
+  Problem-Patient to see Dr. Bob
+
+Proform
+  Proform Omega 3 Fatty Acid (Fish Oil)
+
+Q10
+  Coenzyme Q10
+
+RED YEAST
+  RED YEAST RICE
+
+REFERRAL
+  Referral Discount
+
+Raspberry
+  Raspberry Ketone Supplement
+
+Refund
+  Refund of Patient Fee
+
+Reimb.
+  Reimbursement from Orlando
+
+Relax Tea
+  Relaxing Tea
+
+Rxtofull
+  Upgrade to full program from Rx only
+
+S.Senna-Pd
+  Super Senna Paid
+
+SHOT4VIT
+  Shot for exchange of Multivitamin
+
+SUANA 1
+  SAUNA ONE SESSION
+
+Sauna 1
+  Sauna-30 minutes-1 or 2 people
+
+Sauna Spec
+  Sauna Special-4-1/2 hr. sessions
+
+Senna
+  Senna
+
+Shot 2
+  extra wkly lipo inj.
+
+Stretching
+  Stretching Book-AIS
+
+Sugar Bal
+  Sugar Balance Tea
+
+Super Senn
+  Super Senna w/program
+
+Super Slim
+  Super Slim Tea
+
+Tea, Cold
+  Cold & Flu Tea
+
+Wrist Pac
+  Kozy Collar Wrist Pac
+
+all4
+  Patient took all monthly injections home
+
+anklet
+  Magnetic Jewelry anklet
+
+atri
+  Atri-Antioxidant
+
+bal for
+  balance forward from old system
+
+balance
+  balance of any givin script (odd # )
+
+basic 1
+  Basic Monthly Program
+
+bracelet
+  Magnetic Jewelry bracelet
+
+change med
+  Change of Prescription Medication
+
+cpc Thera
+  Theravites vitamins plum
+
+cpc peach
+  CPC Peach Color Vitamins
+
+cr transfe
+  transfer credit over
+
+diet 25
+  Diethylpropion 25mg
+
+dt
+  Doctors Thermogenic with program
+
+dt pd
+  Doctors Thermogenic paid
+
+ear
+  Christmas Earrings
+
+earrings
+  Magnetic Jewelry earrings
+
+enzy
+  enzy - flora  enzymes(Digestive Enzymes)
+
+enzymes
+  Digestive Enzymes
+
+extra sgt
+  extra sgt shot free
+
+extra shot
+  Dr approved extra shot no charge
+
+fat gram
+  fat gram books
+
+fill105
+  prescription filled phendimetrazine 105
+
+fill15
+  prescription filled phentermine 15 mg
+
+fill25
+  prescription filled diethylpropion 25
+
+fill30
+  prescription filled phentermine 30 mg
+
+fill35
+  prescprition filled phendimetrazine 35mg
+
+fill375
+  prescription filled Phentermine 37.5mg
+
+fill75
+  prescription filled diethylpropion 75
+
+fillHCTZ
+  Fill of HCTZ 25mg
+
+fillcaps
+  prescription filled phent. 37.5 mg Caps
+
+followup
+  3 month follow up
+
+gift
+  Gift certificate
+
+green
+  (No description)
+
+green tea
+  Green tea
+
+hot stone
+  hot stone massage
+
+hydrate
+  electrolyte and amino acid drink mix
+
+injection
+  pt took home shot/ br in we gave shot
+
+kozy eye
+  Kozy sinus pack
+
+kozy gift2
+  kozy gift pack large
+
+lav 4 oz
+  lavender body butter creme
+
+lav 8 oz
+  Lavender Body Butter Creme
+
+lipo
+  lipovite injection w/program
+
+lipo BC
+  Lipo BC Tablets
+
+lipo bc pr
+  Lipo BC with Program
+
+magnetic 1
+  Magnetic set (neck, brace, ankle. eye)
+
+makeup
+  makeu
+
+male vital
+  male vitality tea HORNY GOAT WEED
+
+menopause
+  menopause formula
+
+miss
+  miscellaneous items
+
+mv 21
+  #21 of Multivitamin
+
+mv pd
+  multi vitamins paid
+
+mv21
+  #21 of Mulitvitamin
+
+nat 21
+  21 count of natural image
+
+natural +
+  natural program with 4 extra shots
+
+natural 3
+  NATURAL PRO  W/LIPO 3 month
+
+nature 33
+  nature treament 33 oz
+
+necklace
+  Magnetic jewelry necklace
+
+nikken sho
+  Nikken Cardio Stride Shoes
+
+no inject
+  Refill w/ no injection
+
+no refill
+  Wkly 1 injection no refill on products
+
+nocl4inj
+  no cleanse exchange for shot
+
+oil aching
+  Aching Muscles oil
+
+one month
+  One Month Program
+
+online 6
+  online purchase 6 months visit and follow up included
+
+onlinesgt1
+  online sgt purchase 1 month
+
+onlinesgt2
+  online sgt purchase 2 months
+
+onlinesgt3
+  online sgt purchase 3 months
+
+part fill
+  Partial Fill of Prescription
+
+ph37
+  Phentermine 37.5  Charge
+
+ph37#45
+  Phentermine 37.5 mg (45) Charge
+
+phent 15 p
+  Phentermine 15 mg Charge
+
+phent 15mg
+  Phentermine 15 mg W/Program
+
+phy-1
+  1st patient exam
+
+phy-2
+  1st Patient Visit-Lipo Only Patient
+
+phy-3
+  1st new patient- prescription only
+
+phy1
+  new patient exam
+
+plus extra
+  weight loss plus extra w/program
+
+postage
+  Postage & Shipping
+
+postage 10
+  Postage & Handling
+
+postage 6
+  Shipping & Postage
+
+records
+  records request
+
+red vit
+  red vitamins
+
+refill
+  basic refill of supplements
+
+refill35
+  refill with phendimetrazine 35
+
+refill375
+  phen 37.5 #30, nic,nip,mv
+
+refillcaps
+  refill w/phen 37.5 caps
+
+refund pt
+  refund pt
+
+reimbursme
+  reimbursment
+
+relaxing
+  relaxing tea
+
+replace me
+  replace lost medication
+
+restart
+  restart patient
+
+return inv
+  returned fill to inventory
+
+return15
+  return inventory phen 15 mg
+
+return25
+  return inventory dieth 25 mg
+
+return30
+  return to inventory phen 30
+
+return35
+  return inventory phend 35
+
+return375
+  return to inventory Phen. 37.5
+
+return75
+  return inventory dieth 75
+
+returnMV
+  returned Multi-vitamin
+
+returnNI
+  returned Natural Image
+
+returnNIC
+  returned cleanse
+
+returncaps
+  return inventory phen 37.5mg caps
+
+returnhctz
+  return to inventory HCTZ
+
+sauna
+  Sauna
+
+senna pd
+  senna
+
+sennaclean
+  sennacleanse  with program
+
+sgt
+  semaglutide 1 month
+
+sgt 1 to 2
+  semaglutide up 1 month to 2
+
+sgt 1 to 3
+  semaglutide up 1 month to 3
+
+sgt 1 to 6
+  semaglutide up 1 to 6
+
+sgt 3 to 6
+  semaglutide up 3 to 6
+
+sgt1
+  semaglutide shot 1
+
+sgt2
+  semaglutide shot 2
+
+sgt3
+  semaglutide shot 3
+
+sgt4
+  semaglutide shot 4
+
+sgtintro
+  new patient sgt intro price
+
+shipping
+  Shipping & Postage Fees
+
+shipping10
+  Shipping & Handling Postage fee
+
+shot tran
+  shot transferred to another account
+
+shot2
+  2nd shot in same week
+
+shot4clean
+  shot for a cleanse
+
+shot4nat
+  shot for natural image
+
+sleepy oil
+  Sleepy Time Oil
+
+soap
+  homemade soap
+
+somatomax
+  Somatomax
+
+super-oxi
+  super-Oxi
+
+tax
+  tax is 7%
+
+tea B/P
+  Blood Pressure tea
+
+tip 10
+  Massage Tip 10.00
+
+trans shot
+  shots transferred from another account
+
+transfer
+  transfer credit
+
+trial rx
+  Trial Prescription
+
+trz1
+  tirzepatide shot 1
+
+trz12
+  tir months 1 and 2 purchased together
+
+trz123
+  tir months 1,2,3 purchased together
+
+trz2
+  tirzepatide shot 2
+
+trz3
+  tirzepatide shot 3
+
+trz34
+  tir months 3 and 4 purchased together
+
+trz4
+  tirzepatide shot 4
+
+trzmonth1
+  Tirzepatide month 1
+
+trzmonth2
+  tirzepatide month 2
+
+trzmonth3
+  tirzepatide month 3
+
+trzmonth4
+  Tirzepatide month 4
+
+ultra
+  ultra slim tea
+
+up 1 to 3
+  upgrade from 1 month to 3 month
+
+up 1 to 6
+  Upgrade 1 month to 6 month plan
+
+up 1-2
+  upgrade from 1 to 2 months
+
+up 1-4
+  upgrade from 1 month to 4 month program
+
+up 1-4 re
+  up grade 1 to 4 month for restart / foll
+
+up 2 to 3
+  Upgrade 2 month to 3 month plan
+
+up 2 to 4
+  upgrade 2 to 4 month  new pt price
+
+up 2 to 6
+  upgrade 2 month to 6 month program
+
+up 2-4
+  upgrade from 2 month to 4 month program
+
+up 2-4 re
+  upgrade 2 to 4 month for restart patient
+
+up 3 to 6
+  upgrade from 3 month to 6month to new pa
+
+up 3-4 fol
+  upgrade 3 month to 4 month followup pd
+
+up to full
+  upgrade from naturals to full program
+
+up-restart
+  up grade restart 1 month to 4 month
+
+up4 to 6
+  upgrade 4 mo to 6 month
+
+vit 21
+  21 count of multivitamin
+
+weigh in
+  Weigh in only no lipo shots
+
+weighin
+  weigh in-takes lipovite inj. with them
+
+weight
+  weight loss maxie
+
+wkly
+  weekly weight in and lipo shoot
+
+wkly 2
+  2nd injection for month
+
+wkly 3
+  3rd injection for the month
+
+wkly 4
+  4th injection for the month
+
+wkly1
+  1st wkly shot
+
+wkly2
+  2nd wkly shot
+
+wkly3
+  3rd wkly shot
+
+wkly4
+  4th and final wkly shot

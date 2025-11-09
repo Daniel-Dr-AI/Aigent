@@ -23,7 +23,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// CORE V2: Enhanced metadata capture with unique trace_id\nconst body = $input.item.json.body || {};\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `LEAD-${timestamp}-${random}`,\n  timestamp: new Date().toISOString(),\n  workflow_version: 'core-1.1.0',\n  module: 'intake_lead_capture'\n};"
+        "jsCode": "// CORE V2: Enhanced metadata with body unwrapper\n// FIXES: Double-body wrapping issue from PowerShell/n8n HTTP nodes\n// Handles: { body: { body: {...} } }, { body: {...} }, and unwrapped {...}\nfunction unwrapBody(input) {\n  // Check for double-wrapped: { body: { body: {...} } }\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  // Check for single-wrapped: { body: {...} }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  // Unwrapped: { name: \"...\", email: \"...\" }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `LEAD-${timestamp}-${random}`,\n  timestamp: new Date().toISOString(),\n  workflow_version: 'core-1.1.0',\n  module: 'intake_lead_capture'\n};"
       },
       "id": "add-metadata",
       "name": "Add Basic Metadata",
@@ -33,7 +33,7 @@
         400,
         300
       ],
-      "notes": "CORE: Lightweight metadata\nONLY: trace_id, timestamp, version\nNO: Rate limiting, IP tracking, deduplication"
+      "notes": "CORE V2: Trace ID + Body Unwrapper\nFIXES: Double-body JSON wrapping from PowerShell/n8n\nSUPPORTS: Wrapped, double-wrapped, and unwrapped formats\nONLY: trace_id, timestamp, version\nNO: Rate limiting, IP tracking, deduplication"
     },
     {
       "parameters": {

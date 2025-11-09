@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Messaging SMS Schema",
+  "required": ["sid", "status"],
+  "properties": {
+    "sid": {"type": "string"},
+    "message_id": {"type": "string"},
+    "from": {"type": "string"},
+    "to": {"type": "string"},
+    "body": {"type": "string"},
+    "status": {"type": "string", "enum": ["sent", "delivered", "failed", "queued"]},
+    "date_sent": {"type": "string", "format": "date-time"}
+  }
+}

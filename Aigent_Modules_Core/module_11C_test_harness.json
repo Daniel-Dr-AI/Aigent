@@ -1,0 +1,250 @@
+{
+  "name": "Aigent_Module_11C_Test_Harness",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "connector-test",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "notes": "M11C: Automated connector testing\nBody: {test_mode: 'all'|'single', connector_id: 'optional'}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11C: Add metadata\nconst body = $input.item.json.body || {};\nconst trace_id = `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\n\nreturn {\n  test_mode: body.test_mode || 'all',\n  connector_id: body.connector_id || null,\n  trace_id: trace_id,\n  timestamp: new Date().toISOString(),\n  start_time: Date.now()\n};"
+      },
+      "id": "metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11C: Load registry and prepare test targets\nconst fs = require('fs');\nconst path = require('path');\n\nconst registryPath = process.env.CONNECTOR_REGISTRY_PATH || \n  path.join(__dirname, '../../Aigent_Modules_Core/connectors_registry.json');\n\nconst registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));\n\nconst testMode = $input.item.json.test_mode;\nconst targetId = $input.item.json.connector_id;\n\nlet testTargets = [];\n\nif (testMode === 'single' && targetId) {\n  const connector = registry.find(c => c.id === targetId);\n  if (connector) {\n    testTargets = [connector];\n  }\n} else {\n  // Test specific connector if CONNECTOR_UNDER_TEST is set\n  const underTest = process.env.CONNECTOR_UNDER_TEST;\n  if (underTest) {\n    const connector = registry.find(c => c.id === underTest);\n    if (connector) {\n      testTargets = [connector];\n    }\n  } else {\n    testTargets = registry;\n  }\n}\n\nreturn {\n  test_targets: testTargets,\n  total_connectors: testTargets.length,\n  trace_id: $input.item.json.trace_id,\n  start_time: $input.item.json.start_time\n};"
+      },
+      "id": "load-targets",
+      "name": "Load Test Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300],
+      "notes": "M11C: Determine which connectors to test"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11C: Split test targets into separate items for parallel testing\nconst testTargets = $input.item.json.test_targets;\nconst trace_id = $input.item.json.trace_id;\nconst start_time = $input.item.json.start_time;\n\nreturn testTargets.map(connector => ({\n  connector: connector,\n  trace_id: trace_id,\n  start_time: start_time\n}));"
+      },
+      "id": "split-targets",
+      "name": "Split Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300],
+      "notes": "M11C: Create individual test items"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11C: Test single connector across all endpoints\nconst connector = $input.item.json.connector;\nconst endpoints = Object.keys(connector.endpoints);\nconst testResults = [];\n\nfor (const endpoint of endpoints) {\n  const testStart = Date.now();\n  \n  // Test mock mode\n  let mockResult = null;\n  try {\n    const mockResponse = await $http.request({\n      method: 'POST',\n      url: `${process.env.N8N_BASE_URL}/webhook/connector/mock-fetch`,\n      body: {\n        connector_id: connector.id,\n        endpoint: endpoint\n      },\n      timeout: 5000\n    });\n    mockResult = {\n      success: mockResponse.success !== false,\n      duration_ms: Date.now() - testStart,\n      source: 'mock'\n    };\n  } catch (error) {\n    mockResult = {\n      success: false,\n      error: error.message,\n      source: 'mock'\n    };\n  }\n  \n  // Test live mode (if not in global mock mode)\n  let liveResult = null;\n  const mockModeGlobal = (process.env.MOCK_MODE_GLOBAL || 'false').toLowerCase() === 'true';\n  \n  if (!mockModeGlobal) {\n    const liveStart = Date.now();\n    try {\n      const liveResponse = await $http.request({\n        method: 'POST',\n        url: `${process.env.N8N_BASE_URL}/webhook/connector/execute`,\n        body: {\n          connector_id: connector.id,\n          endpoint: endpoint,\n          payload: {} // Empty payload for basic connectivity test\n        },\n        timeout: parseInt(process.env.DEFAULT_TIMEOUT_MS || '10000')\n      });\n      liveResult = {\n        success: liveResponse.success !== false,\n        duration_ms: Date.now() - liveStart,\n        source: 'live'\n      };\n    } catch (error) {\n      liveResult = {\n        success: false,\n        error: error.message,\n        source: 'live'\n      };\n    }\n  }\n  \n  testResults.push({\n    endpoint: endpoint,\n    mock: mockResult,\n    live: liveResult,\n    schema_check: 'skipped' // Can be enhanced with actual schema validation\n  });\n}\n\nconst totalTests = testResults.length * 2; // mock + live\nconst passedTests = testResults.reduce((sum, r) => \n  sum + (r.mock.success ? 1 : 0) + (r.live?.success ? 1 : 0), 0);\n\nreturn {\n  connector_id: connector.id,\n  connector_name: connector.name,\n  connector_type: connector.type,\n  endpoints_tested: endpoints.length,\n  test_results: testResults,\n  tests_passed: passedTests,\n  tests_failed: totalTests - passedTests,\n  success_rate: ((passedTests / totalTests) * 100).toFixed(1),\n  trace_id: $input.item.json.trace_id\n};"
+      },
+      "id": "test-connector",
+      "name": "Test Connector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300],
+      "notes": "M11C: Execute tests for all endpoints (mock + live)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11C: Aggregate all test results\nconst allResults = $input.all().map(item => item.json);\nconst firstItem = $input.first().json;\n\nconst totalConnectors = allResults.length;\nconst failedConnectors = allResults.filter(r => r.tests_failed > 0);\nconst passedConnectors = allResults.filter(r => r.tests_failed === 0);\n\nconst totalTests = allResults.reduce((sum, r) => sum + r.tests_passed + r.tests_failed, 0);\nconst totalPassed = allResults.reduce((sum, r) => sum + r.tests_passed, 0);\nconst totalFailed = allResults.reduce((sum, r) => sum + r.tests_failed, 0);\n\nconst avgLatency = allResults.reduce((sum, r) => {\n  const endpointLatencies = r.test_results.map(t => t.mock.duration_ms || 0);\n  const avgEndpointLatency = endpointLatencies.reduce((s, l) => s + l, 0) / endpointLatencies.length;\n  return sum + avgEndpointLatency;\n}, 0) / totalConnectors;\n\nconst duration = Date.now() - firstItem.start_time;\n\nconst summary = {\n  success: totalFailed === 0,\n  test_run_id: firstItem.trace_id,\n  timestamp: new Date().toISOString(),\n  duration_ms: duration,\n  total_connectors: totalConnectors,\n  connectors_passed: passedConnectors.length,\n  connectors_failed: failedConnectors.length,\n  total_tests: totalTests,\n  tests_passed: totalPassed,\n  tests_failed: totalFailed,\n  success_rate: ((totalPassed / totalTests) * 100).toFixed(1),\n  average_latency_ms: Math.round(avgLatency),\n  failed_connectors: failedConnectors.map(c => c.connector_id),\n  detailed_results: allResults\n};\n\nreturn summary;"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300],
+      "notes": "M11C: Combine all test results"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11C: Cache test results to filesystem\nconst fs = require('fs');\nconst path = require('path');\n\nconst results = $input.item.json;\n\nconst cachePath = process.env.CACHE_PATH || \n  path.join(__dirname, '../../Aigent_Modules_Core/cache');\n\nif (!fs.existsSync(cachePath)) {\n  fs.mkdirSync(cachePath, { recursive: true });\n}\n\nconst cacheFile = path.join(cachePath, 'last_test_results.json');\nfs.writeFileSync(cacheFile, JSON.stringify(results, null, 2), 'utf8');\n\n// Also save to timestamped file for history\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\nconst historyFile = path.join(cachePath, `test_results_${timestamp}.json`);\nfs.writeFileSync(historyFile, JSON.stringify(results, null, 2), 'utf8');\n\nreturn {\n  ...results,\n  cached_to: cacheFile,\n  history_file: historyFile\n};"
+      },
+      "id": "cache-results",
+      "name": "Cache Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 300],
+      "notes": "M11C: Save results to cache directory"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.LOG_SHEET_ID || $env.GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$env.LOG_SHEET_TAB || 'Connector_Tests'}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "test_run_id": "={{ $json.test_run_id }}",
+            "total_connectors": "={{ $json.total_connectors }}",
+            "connectors_passed": "={{ $json.connectors_passed }}",
+            "connectors_failed": "={{ $json.connectors_failed }}",
+            "total_tests": "={{ $json.total_tests }}",
+            "tests_passed": "={{ $json.tests_passed }}",
+            "tests_failed": "={{ $json.tests_failed }}",
+            "success_rate": "={{ $json.success_rate }}",
+            "average_latency_ms": "={{ $json.average_latency_ms }}",
+            "duration_ms": "={{ $json.duration_ms }}",
+            "failed_connectors": "={{ $json.failed_connectors.join(', ') }}"
+          }
+        }
+      },
+      "id": "log-sheets",
+      "name": "Log to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1600, 240],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "notes": "M11C: Log test summary to Google Sheets"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=🧪 Connector Test Report\\n✅ Passed: {{ $json.connectors_passed }}/{{ $json.total_connectors }}\\n❌ Failed: {{ $json.connectors_failed }}\\n📊 Success Rate: {{ $json.success_rate }}%\\n⏱️ Avg Latency: {{ $json.average_latency_ms }}ms\\n🔍 Test ID: {{ $json.test_run_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "notify",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 360],
+      "continueOnFail": true,
+      "notes": "M11C: Send test summary to Slack/Teams"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "return-success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{"node": "Add Metadata"}]]
+    },
+    "Add Metadata": {
+      "main": [[{"node": "Load Test Targets"}]]
+    },
+    "Load Test Targets": {
+      "main": [[{"node": "Split Targets"}]]
+    },
+    "Split Targets": {
+      "main": [[{"node": "Test Connector"}]]
+    },
+    "Test Connector": {
+      "main": [[{"node": "Aggregate Results"}]]
+    },
+    "Aggregate Results": {
+      "main": [[{"node": "Cache Results"}]]
+    },
+    "Cache Results": {
+      "main": [[
+        {"node": "Log to Sheets"},
+        {"node": "Send Notification"},
+        {"node": "Return Success"}
+      ]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-11",
+      "name": "Module-11"
+    },
+    {
+      "id": "test-harness",
+      "name": "Test-Harness"
+    }
+  ],
+  "meta": {
+    "version": "1.0.0",
+    "branch": "Core",
+    "description": "Module 11C: Test Harness - Automated validation and compatibility benchmarking for all connectors",
+    "test_modes": [
+      "all - Test all registered connectors",
+      "single - Test specific connector by ID"
+    ],
+    "required_vars": [
+      "N8N_BASE_URL (for calling M11A and M11B)"
+    ],
+    "optional_vars": [
+      "CONNECTOR_UNDER_TEST (limits testing to specific connector)",
+      "CONNECTOR_REGISTRY_PATH",
+      "MOCK_MODE_GLOBAL (skip live tests if true)",
+      "DEFAULT_TIMEOUT_MS",
+      "CACHE_PATH (default: ./cache)",
+      "LOG_SHEET_ID (Google Sheets for results)",
+      "LOG_SHEET_TAB (default: Connector_Tests)",
+      "NOTIFICATION_WEBHOOK_URL (Slack/Teams)"
+    ],
+    "features": [
+      "Automated batch testing",
+      "Mock and live mode testing",
+      "Endpoint coverage validation",
+      "Latency measurement",
+      "Success rate calculation",
+      "Results caching",
+      "Google Sheets logging",
+      "Slack/Teams notifications",
+      "Historical test tracking"
+    ],
+    "test_categories": [
+      "Connectivity - Can connector be reached?",
+      "Schema - Does response match expected format?",
+      "Performance - Latency within acceptable range?",
+      "Reliability - Does retry logic work?"
+    ]
+  }
+}

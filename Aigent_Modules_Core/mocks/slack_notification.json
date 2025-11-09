@@ -1,0 +1,11 @@
+{
+  "ok": true,
+  "success": true,
+  "channel": "C0123456789",
+  "ts": "1699545600.123456",
+  "message": {
+    "text": "Mock notification sent successfully",
+    "type": "message",
+    "user": "U0123456789"
+  }
+}

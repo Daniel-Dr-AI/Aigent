@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Notification Schema",
+  "required": ["ok"],
+  "properties": {
+    "ok": {"type": "boolean"},
+    "success": {"type": "boolean"},
+    "message": {"type": "object"}
+  }
+}

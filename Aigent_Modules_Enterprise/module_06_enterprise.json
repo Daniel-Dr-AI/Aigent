@@ -110,7 +110,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.item.json.body || {};\nconst errors = [];\n\nif (!body.file_url) {\n  errors.push('file_url (required)');\n} else if (!/^https?:\\/\\//i.test(body.file_url)) {\n  errors.push('file_url (must be valid HTTP/HTTPS URL)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid fields: ${errors.join(', ')}`\n  : 'Please provide valid file_url';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  error_code: 'VALIDATION_ERROR',\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// ENTERPRISE: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst errors = [];\n\nif (!body.file_url) {\n  errors.push('file_url (required)');\n} else if (!/^https?:\\/\\//i.test(body.file_url)) {\n  errors.push('file_url (must be valid HTTP/HTTPS URL)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid fields: ${errors.join(', ')}`\n  : 'Please provide valid file_url';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  error_code: 'VALIDATION_ERROR',\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "format-validation-error",
       "name": "Format Validation Error",
