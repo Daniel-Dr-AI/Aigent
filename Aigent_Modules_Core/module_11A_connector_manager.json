@@ -1,0 +1,396 @@
+{
+  "name": "Aigent_Module_11A_Connector_Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "connector/:operation",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "notes": "M11A: Dynamic connector operations via path parameter\nOperations: lookup, normalize, execute, connector-resolve"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A: Add metadata and extract operation\nconst operation = $input.item.json.params?.operation || 'execute';\nconst body = $input.item.json.body || {};\nconst trace_id = `CONN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\n\nreturn {\n  operation: operation,\n  body: body,\n  trace_id: trace_id,\n  timestamp: new Date().toISOString(),\n  start_time: Date.now()\n};"
+      },
+      "id": "metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A: Load and parse connectors registry\nconst fs = require('fs');\nconst path = require('path');\n\n// Determine registry path\nconst registryPath = process.env.CONNECTOR_REGISTRY_PATH || \n  path.join(__dirname, '../../Aigent_Modules_Core/connectors_registry.json');\n\ntry {\n  const registryData = fs.readFileSync(registryPath, 'utf8');\n  const connectors = JSON.parse(registryData);\n  \n  return {\n    success: true,\n    connectors: connectors,\n    registry_path: registryPath,\n    connector_count: connectors.length,\n    trace_id: $input.item.json.trace_id\n  };\n} catch (error) {\n  return {\n    success: false,\n    error: 'Failed to load registry',\n    error_message: error.message,\n    registry_path: registryPath,\n    trace_id: $input.item.json.trace_id\n  };\n}"
+      },
+      "id": "load-registry",
+      "name": "Load Registry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 300],
+      "notes": "M11A: Load connectors_registry.json from filesystem"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      },
+      "id": "check-registry",
+      "name": "Check Registry Loaded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('Add Metadata').first().json.operation }}",
+              "value2": "lookup"
+            }
+          ]
+        }
+      },
+      "id": "route-operation",
+      "name": "Route Operation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1000, 240],
+      "notes": "M11A: Route to operation handler\nTrue = lookup, False = check other operations"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A: Lookup connector by ID\nconst connectors = $('Load Registry').first().json.connectors;\nconst requestedId = $('Add Metadata').first().json.body.connector_id;\n\nconst connector = connectors.find(c => c.id === requestedId);\n\nif (!connector) {\n  return {\n    success: false,\n    error: 'Connector not found',\n    connector_id: requestedId,\n    available_connectors: connectors.map(c => c.id)\n  };\n}\n\nreturn {\n  success: true,\n  connector: connector,\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "lookup-handler",
+      "name": "Lookup Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 180],
+      "notes": "M11A: Find connector definition by ID"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('Add Metadata').first().json.operation }}",
+              "value2": "normalize"
+            }
+          ]
+        }
+      },
+      "id": "route-normalize",
+      "name": "Check Normalize",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A: Normalize request/response payloads\nconst connectors = $('Load Registry').first().json.connectors;\nconst connectorId = $('Add Metadata').first().json.body.connector_id;\nconst payload = $('Add Metadata').first().json.body.payload;\nconst direction = $('Add Metadata').first().json.body.direction || 'request'; // request or response\n\nconst connector = connectors.find(c => c.id === connectorId);\nif (!connector) {\n  return { success: false, error: 'Connector not found' };\n}\n\n// Apply normalization adapters\nconst adapters = {\n  calendar: {\n    normalizeRequest: (req) => ({\n      date: req.date || req.preferred_date || new Date().toISOString().split('T')[0],\n      duration: req.duration || 30,\n      timezone: req.timezone || 'America/New_York'\n    }),\n    normalizeResponse: (res) => ({\n      slots: res.slots || res.data?.slots || res.available_times || [],\n      next_available: res.next_available || (res.slots && res.slots[0]) || null\n    })\n  },\n  messaging: {\n    normalizeRequest: (req) => ({\n      recipient: req.recipient || req.to || req.email,\n      message: req.message || req.body || req.text,\n      channel: req.channel || 'email'\n    }),\n    normalizeResponse: (res) => ({\n      message_id: res.message_id || res.id || res.sid,\n      status: res.status || 'sent'\n    })\n  },\n  video: {\n    normalizeRequest: (req) => ({\n      topic: req.topic || 'Video Meeting',\n      start_time: req.start_time || new Date().toISOString(),\n      duration: req.duration || 60\n    }),\n    normalizeResponse: (res) => ({\n      meeting_id: res.meeting_id || res.id,\n      join_url: res.join_url || res.url,\n      start_url: res.start_url || res.host_url\n    })\n  },\n  payment: {\n    normalizeRequest: (req) => ({\n      amount: req.amount,\n      currency: req.currency || 'USD',\n      customer_email: req.customer_email || req.email\n    }),\n    normalizeResponse: (res) => ({\n      charge_id: res.charge_id || res.id,\n      status: res.status,\n      receipt_url: res.receipt_url\n    })\n  },\n  storage: {\n    normalizeRequest: (req) => req,\n    normalizeResponse: (res) => res\n  },\n  crm: {\n    normalizeRequest: (req) => ({\n      fields: req.fields || req.data\n    }),\n    normalizeResponse: (res) => ({\n      record_id: res.record_id || res.id\n    })\n  }\n};\n\nconst adapter = adapters[connector.type] || { normalizeRequest: (r) => r, normalizeResponse: (r) => r };\nconst normalized = direction === 'request' \n  ? adapter.normalizeRequest(payload)\n  : adapter.normalizeResponse(payload);\n\nreturn {\n  success: true,\n  connector_id: connectorId,\n  connector_type: connector.type,\n  direction: direction,\n  original_payload: payload,\n  normalized_payload: normalized,\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "normalize-handler",
+      "name": "Normalize Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 240],
+      "notes": "M11A: Apply type-specific normalization adapters"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('Add Metadata').first().json.operation }}",
+              "value2": "execute"
+            }
+          ]
+        }
+      },
+      "id": "route-execute",
+      "name": "Check Execute",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1400, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A: Execute connector call (live or mock)\nconst mockModeGlobal = (process.env.MOCK_MODE_GLOBAL || 'false').toLowerCase() === 'true';\nconst connectors = $('Load Registry').first().json.connectors;\nconst connectorId = $('Add Metadata').first().json.body.connector_id;\nconst endpoint = $('Add Metadata').first().json.body.endpoint; // e.g., 'availability', 'bookings'\nconst payload = $('Add Metadata').first().json.body.payload;\n\nconst connector = connectors.find(c => c.id === connectorId);\nif (!connector) {\n  return { success: false, error: 'Connector not found', connector_id: connectorId };\n}\n\nif (!connector.endpoints[endpoint]) {\n  return { success: false, error: 'Endpoint not found', endpoint: endpoint, available_endpoints: Object.keys(connector.endpoints) };\n}\n\nconst endpointDef = connector.endpoints[endpoint];\n\n// Check for connector-specific or global mock mode\nconst connectorMockMode = process.env[`MOCK_${connector.type.toUpperCase()}`];\nconst useMock = mockModeGlobal || (connectorMockMode && connectorMockMode.toLowerCase() === 'true');\n\nif (useMock) {\n  // Mock mode - delegate to M11B\n  return {\n    success: true,\n    mode: 'mock',\n    connector_id: connectorId,\n    endpoint: endpoint,\n    mock_file: connector.mock?.file,\n    delegate_to: 'module_11B',\n    payload: payload,\n    trace_id: $('Add Metadata').first().json.trace_id\n  };\n}\n\n// Live mode - prepare HTTP request\nconst baseUrl = connector.base_url.replace(/{{\\$env\\.(\\w+)}}/g, (match, envVar) => {\n  return process.env[envVar] || match;\n});\n\nconst url = baseUrl + endpointDef.path;\nconst method = endpointDef.method;\n\n// Map payload to request format\nconst mappedPayload = {};\nfor (const [key, value] of Object.entries(endpointDef.request_map || {})) {\n  mappedPayload[key] = payload[value] || payload[key];\n}\n\nreturn {\n  success: true,\n  mode: 'live',\n  connector_id: connectorId,\n  endpoint: endpoint,\n  url: url,\n  method: method,\n  payload: mappedPayload,\n  auth: connector.auth,\n  response_map: endpointDef.response_map,\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "execute-handler",
+      "name": "Execute Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 300],
+      "notes": "M11A: Determine mode (live/mock) and prepare request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.mode }}",
+              "value2": "mock"
+            }
+          ]
+        }
+      },
+      "id": "check-mode",
+      "name": "Check Mode",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/mock-fetch",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.connector_id }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "={{ $json.endpoint }}"
+            },
+            {
+              "name": "mock_file",
+              "value": "={{ $json.mock_file }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "call-mock",
+      "name": "Call Mock Simulator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 240],
+      "notes": "M11A: Delegate to M11B for mock response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A: Execute live HTTP request\nconst axios = require('axios');\nconst execData = $input.item.json;\n\nconst headers = {\n  'Content-Type': 'application/json',\n  'User-Agent': 'Aigent-ConnectorManager/1.0'\n};\n\n// Apply authentication\nif (execData.auth.mode === 'bearer') {\n  const token = process.env[execData.auth.token_env];\n  if (token) headers['Authorization'] = `Bearer ${token}`;\n} else if (execData.auth.mode === 'apiKey') {\n  const key = process.env[execData.auth.key_env];\n  if (key) headers['Authorization'] = `Bearer ${key}`;\n}\n\nconst timeout = parseInt(process.env.DEFAULT_TIMEOUT_MS || '10000');\n\ntry {\n  const startTime = Date.now();\n  const response = await axios({\n    method: execData.method,\n    url: execData.url,\n    data: execData.payload,\n    headers: headers,\n    timeout: timeout\n  });\n  \n  const duration = Date.now() - startTime;\n  \n  // Map response fields\n  const mappedResponse = {};\n  for (const [key, value] of Object.entries(execData.response_map || {})) {\n    const keys = value.split('.');\n    let val = response.data;\n    for (const k of keys) {\n      val = val?.[k];\n    }\n    mappedResponse[key] = val;\n  }\n  \n  return {\n    success: true,\n    source: 'live',\n    connector_id: execData.connector_id,\n    endpoint: execData.endpoint,\n    data: mappedResponse,\n    raw_response: response.data,\n    status_code: response.status,\n    duration_ms: duration,\n    trace_id: execData.trace_id\n  };\n} catch (error) {\n  return {\n    success: false,\n    source: 'live',\n    error: error.message,\n    connector_id: execData.connector_id,\n    endpoint: execData.endpoint,\n    trace_id: execData.trace_id\n  };\n}"
+      },
+      "id": "execute-live",
+      "name": "Execute Live Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 360],
+      "notes": "M11A: Execute actual HTTP request to external API"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('Add Metadata').first().json.operation }}",
+              "value2": "connector-resolve"
+            }
+          ]
+        }
+      },
+      "id": "route-resolve",
+      "name": "Check Resolve",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1600, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A: Resolve connector details for dependent modules\nconst connectors = $('Load Registry').first().json.connectors;\nconst moduleId = $('Add Metadata').first().json.body.module_id; // e.g., 'module_02_core'\nconst serviceType = $('Add Metadata').first().json.body.service_type; // e.g., 'calendar', 'messaging'\n\n// Find connectors used by this module\nconst moduleConnectors = connectors.filter(c => \n  c.modules_using.includes(moduleId) ||\n  (serviceType && c.type === serviceType)\n);\n\nif (moduleConnectors.length === 0) {\n  return {\n    success: false,\n    error: 'No connectors found',\n    module_id: moduleId,\n    service_type: serviceType\n  };\n}\n\n// Return primary connector (first match)\nconst primary = moduleConnectors[0];\n\nreturn {\n  success: true,\n  module_id: moduleId,\n  service_type: serviceType,\n  primary_connector: {\n    id: primary.id,\n    name: primary.name,\n    type: primary.type,\n    base_url: primary.base_url,\n    endpoints: Object.keys(primary.endpoints)\n  },\n  alternatives: moduleConnectors.slice(1).map(c => ({\n    id: c.id,\n    name: c.name\n  })),\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "resolve-handler",
+      "name": "Resolve Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 480],
+      "notes": "M11A: Resolve connector config for calling module"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "return-success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2200, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: 'Registry load failed', details: $('Load Registry').first().json} }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "return-registry-error",
+      "name": "Return Registry Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1000, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: 'Invalid operation', operation: $('Add Metadata').first().json.operation, valid_operations: ['lookup', 'normalize', 'execute', 'connector-resolve']} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "return-invalid-op",
+      "name": "Return Invalid Operation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 580]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{"node": "Add Metadata"}]]
+    },
+    "Add Metadata": {
+      "main": [[{"node": "Load Registry"}]]
+    },
+    "Load Registry": {
+      "main": [[{"node": "Check Registry Loaded"}]]
+    },
+    "Check Registry Loaded": {
+      "main": [
+        [{"node": "Route Operation"}],
+        [{"node": "Return Registry Error"}]
+      ]
+    },
+    "Route Operation": {
+      "main": [
+        [{"node": "Lookup Handler"}],
+        [{"node": "Check Normalize"}]
+      ]
+    },
+    "Lookup Handler": {
+      "main": [[{"node": "Return Success"}]]
+    },
+    "Check Normalize": {
+      "main": [
+        [{"node": "Normalize Handler"}],
+        [{"node": "Check Execute"}]
+      ]
+    },
+    "Normalize Handler": {
+      "main": [[{"node": "Return Success"}]]
+    },
+    "Check Execute": {
+      "main": [
+        [{"node": "Execute Handler"}],
+        [{"node": "Check Resolve"}]
+      ]
+    },
+    "Execute Handler": {
+      "main": [[{"node": "Check Mode"}]]
+    },
+    "Check Mode": {
+      "main": [
+        [{"node": "Call Mock Simulator"}],
+        [{"node": "Execute Live Request"}]
+      ]
+    },
+    "Call Mock Simulator": {
+      "main": [[{"node": "Return Success"}]]
+    },
+    "Execute Live Request": {
+      "main": [[{"node": "Return Success"}]]
+    },
+    "Check Resolve": {
+      "main": [
+        [{"node": "Resolve Handler"}],
+        [{"node": "Return Invalid Operation"}]
+      ]
+    },
+    "Resolve Handler": {
+      "main": [[{"node": "Return Success"}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-11",
+      "name": "Module-11"
+    },
+    {
+      "id": "connector-manager",
+      "name": "Connector-Manager"
+    }
+  ],
+  "meta": {
+    "version": "1.0.0",
+    "branch": "Core",
+    "description": "Module 11A: Universal Connector Manager - Registry-driven integration hub with normalization and routing",
+    "operations": [
+      "lookup - Find connector definition by ID",
+      "normalize - Standardize request/response payloads",
+      "execute - Run live or mock connector call",
+      "connector-resolve - Get connector config for calling module"
+    ],
+    "required_vars": [
+      "CONNECTOR_REGISTRY_PATH (optional, defaults to ./connectors_registry.json)"
+    ],
+    "optional_vars": [
+      "MOCK_MODE_GLOBAL (true/false)",
+      "MOCK_CALENDAR (true/false)",
+      "MOCK_MESSAGING (true/false)",
+      "MOCK_PAYMENTS (true/false)",
+      "MOCK_VIDEO (true/false)",
+      "DEFAULT_TIMEOUT_MS (default: 10000)",
+      "N8N_BASE_URL (for mock delegation)"
+    ],
+    "features": [
+      "Registry-driven connector management",
+      "Live and mock mode switching",
+      "Type-specific normalization adapters",
+      "Dynamic authentication handling",
+      "Response field mapping",
+      "Module-specific connector resolution"
+    ]
+  }
+}

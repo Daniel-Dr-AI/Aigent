@@ -1,0 +1,510 @@
+[
+  {
+    "id": "cal_com",
+    "type": "calendar",
+    "name": "Cal.com",
+    "base_url": "{{$env.SCHEDULING_API_URL}}",
+    "auth": {
+      "mode": "bearer",
+      "token_env": "CALCOM_API_KEY"
+    },
+    "endpoints": {
+      "availability": {
+        "path": "/availability",
+        "method": "GET",
+        "request_map": {
+          "date": "date",
+          "duration": "duration"
+        },
+        "response_map": {
+          "slots": "slots"
+        }
+      },
+      "bookings": {
+        "path": "/bookings",
+        "method": "POST",
+        "request_map": {
+          "name": "customer_name",
+          "email": "email",
+          "phone": "phone",
+          "start_time": "start_time",
+          "duration": "duration",
+          "timezone": "timezone"
+        },
+        "response_map": {
+          "id": "booking_id"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/cal_com_availability.json",
+      "schema": "./schemas/calendar_availability.schema.json"
+    },
+    "modules_using": ["module_02_core", "module_02_enterprise"]
+  },
+  {
+    "id": "calendly",
+    "type": "calendar",
+    "name": "Calendly",
+    "base_url": "https://api.calendly.com",
+    "auth": {
+      "mode": "bearer",
+      "token_env": "CALENDLY_API_KEY"
+    },
+    "endpoints": {
+      "availability": {
+        "path": "/availability",
+        "method": "GET",
+        "request_map": {
+          "preferred_date": "start_time"
+        },
+        "response_map": {
+          "data": "slots"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/calendly_availability.json",
+      "schema": "./schemas/calendar_availability.schema.json"
+    },
+    "modules_using": ["module_02_core", "module_02_enterprise"]
+  },
+  {
+    "id": "google_calendar",
+    "type": "calendar",
+    "name": "Google Calendar",
+    "base_url": "https://www.googleapis.com/calendar/v3",
+    "auth": {
+      "mode": "oauth2",
+      "credential_name": "Google Calendar OAuth2"
+    },
+    "endpoints": {
+      "availability": {
+        "path": "/calendars/primary/events",
+        "method": "GET",
+        "request_map": {
+          "timeMin": "start_date",
+          "timeMax": "end_date"
+        },
+        "response_map": {
+          "items": "events"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/google_calendar_availability.json",
+      "schema": "./schemas/calendar_availability.schema.json"
+    },
+    "modules_using": ["module_02_core", "module_02_enterprise"]
+  },
+  {
+    "id": "zoom",
+    "type": "video",
+    "name": "Zoom",
+    "base_url": "https://api.zoom.us/v2",
+    "auth": {
+      "mode": "bearer",
+      "token_env": "VIDEO_PLATFORM_API_KEY"
+    },
+    "endpoints": {
+      "create_meeting": {
+        "path": "/meetings",
+        "method": "POST",
+        "request_map": {
+          "topic": "topic",
+          "type": "type",
+          "start_time": "start_time",
+          "duration": "duration",
+          "settings": "settings"
+        },
+        "response_map": {
+          "id": "meeting_id",
+          "join_url": "join_url",
+          "start_url": "start_url"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/zoom_meeting.json",
+      "schema": "./schemas/video_meeting.schema.json"
+    },
+    "modules_using": ["module_03_core", "module_03_enterprise"]
+  },
+  {
+    "id": "google_meet",
+    "type": "video",
+    "name": "Google Meet",
+    "base_url": "https://www.googleapis.com/calendar/v3",
+    "auth": {
+      "mode": "oauth2",
+      "credential_name": "Google Calendar OAuth2"
+    },
+    "endpoints": {
+      "create_meeting": {
+        "path": "/calendars/primary/events",
+        "method": "POST",
+        "request_map": {
+          "summary": "topic",
+          "start": "start_time",
+          "end": "end_time",
+          "conferenceData": "conference_settings"
+        },
+        "response_map": {
+          "conferenceData.entryPoints[0].uri": "join_url"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/google_meet_meeting.json",
+      "schema": "./schemas/video_meeting.schema.json"
+    },
+    "modules_using": ["module_03_core", "module_03_enterprise"]
+  },
+  {
+    "id": "doxy_me",
+    "type": "video",
+    "name": "Doxy.me",
+    "base_url": "https://api.doxy.me/api",
+    "auth": {
+      "mode": "apiKey",
+      "key_env": "DOXYME_API_KEY"
+    },
+    "endpoints": {
+      "create_meeting": {
+        "path": "/rooms",
+        "method": "POST",
+        "request_map": {
+          "name": "topic",
+          "scheduled_time": "start_time"
+        },
+        "response_map": {
+          "room_url": "join_url"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/doxyme_meeting.json",
+      "schema": "./schemas/video_meeting.schema.json"
+    },
+    "modules_using": ["module_03_enterprise"]
+  },
+  {
+    "id": "stripe",
+    "type": "payment",
+    "name": "Stripe",
+    "base_url": "https://api.stripe.com/v1",
+    "auth": {
+      "mode": "credential",
+      "credential_name": "Stripe API",
+      "credential_type": "n8n-nodes-base.stripe"
+    },
+    "endpoints": {
+      "create_charge": {
+        "path": "/charges",
+        "method": "POST",
+        "request_map": {
+          "amount": "amount",
+          "currency": "currency",
+          "customer": "customer_email",
+          "description": "description",
+          "metadata": "metadata"
+        },
+        "response_map": {
+          "id": "charge_id",
+          "status": "status",
+          "receipt_url": "receipt_url"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/stripe_charge.json",
+      "schema": "./schemas/payment_charge.schema.json"
+    },
+    "modules_using": ["module_04_core", "module_04_enterprise"]
+  },
+  {
+    "id": "sendgrid",
+    "type": "messaging",
+    "name": "SendGrid",
+    "base_url": "https://api.sendgrid.com/v3",
+    "auth": {
+      "mode": "credential",
+      "credential_name": "SendGrid API",
+      "credential_type": "n8n-nodes-base.sendGrid"
+    },
+    "endpoints": {
+      "send_email": {
+        "path": "/mail/send",
+        "method": "POST",
+        "request_map": {
+          "from": "from_email",
+          "to": "to_email",
+          "subject": "subject",
+          "content": "message"
+        },
+        "response_map": {
+          "message_id": "message_id"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/sendgrid_email.json",
+      "schema": "./schemas/messaging_email.schema.json"
+    },
+    "modules_using": ["module_01_core", "module_02_core", "module_03_core", "module_04_core", "module_05_core", "module_08_core", "module_01_enterprise", "module_02_enterprise", "module_03_enterprise", "module_04_enterprise", "module_05_enterprise", "module_08_enterprise"]
+  },
+  {
+    "id": "twilio",
+    "type": "messaging",
+    "name": "Twilio",
+    "base_url": "https://api.twilio.com/2010-04-01",
+    "auth": {
+      "mode": "credential",
+      "credential_name": "Twilio API",
+      "credential_type": "n8n-nodes-base.twilio"
+    },
+    "endpoints": {
+      "send_sms": {
+        "path": "/Accounts/{AccountSid}/Messages.json",
+        "method": "POST",
+        "request_map": {
+          "from": "from_number",
+          "to": "to_number",
+          "body": "message"
+        },
+        "response_map": {
+          "sid": "message_id",
+          "status": "status"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/twilio_sms.json",
+      "schema": "./schemas/messaging_sms.schema.json"
+    },
+    "modules_using": ["module_05_enterprise", "module_08_core", "module_08_enterprise"]
+  },
+  {
+    "id": "telegram",
+    "type": "messaging",
+    "name": "Telegram",
+    "base_url": "https://api.telegram.org",
+    "auth": {
+      "mode": "token",
+      "token_env": "TELEGRAM_BOT_TOKEN"
+    },
+    "endpoints": {
+      "send_message": {
+        "path": "/bot{token}/sendMessage",
+        "method": "POST",
+        "request_map": {
+          "chat_id": "recipient",
+          "text": "message"
+        },
+        "response_map": {
+          "message_id": "message_id"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/telegram_message.json",
+      "schema": "./schemas/messaging_telegram.schema.json"
+    },
+    "modules_using": ["module_08_enterprise"]
+  },
+  {
+    "id": "google_sheets",
+    "type": "storage",
+    "name": "Google Sheets",
+    "base_url": "https://sheets.googleapis.com/v4",
+    "auth": {
+      "mode": "oauth2",
+      "credential_name": "Google Sheets OAuth2"
+    },
+    "endpoints": {
+      "append": {
+        "path": "/spreadsheets/{spreadsheetId}/values/{range}:append",
+        "method": "POST",
+        "request_map": {
+          "values": "rows"
+        },
+        "response_map": {
+          "updates": "result"
+        }
+      },
+      "read": {
+        "path": "/spreadsheets/{spreadsheetId}/values/{range}",
+        "method": "GET",
+        "response_map": {
+          "values": "rows"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/google_sheets_append.json",
+      "schema": "./schemas/storage_sheets.schema.json"
+    },
+    "modules_using": ["module_01_core", "module_02_core", "module_03_core", "module_04_core", "module_05_core", "module_06_core", "module_07_core", "module_08_core", "module_09_core", "module_10_core", "module_01_enterprise", "module_02_enterprise", "module_03_enterprise", "module_04_enterprise", "module_05_enterprise", "module_06_enterprise", "module_07_enterprise", "module_08_enterprise", "module_09_enterprise", "module_10_enterprise"]
+  },
+  {
+    "id": "google_cloud_vision",
+    "type": "ocr",
+    "name": "Google Cloud Vision",
+    "base_url": "https://vision.googleapis.com/v1",
+    "auth": {
+      "mode": "oauth2",
+      "credential_name": "Google Cloud OAuth2"
+    },
+    "endpoints": {
+      "detect_text": {
+        "path": "/images:annotate",
+        "method": "POST",
+        "request_map": {
+          "image": "image_content",
+          "features": "features"
+        },
+        "response_map": {
+          "textAnnotations": "detected_text"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/google_vision_ocr.json",
+      "schema": "./schemas/ocr_result.schema.json"
+    },
+    "modules_using": ["module_06_core", "module_06_enterprise"]
+  },
+  {
+    "id": "airtable",
+    "type": "crm",
+    "name": "Airtable",
+    "base_url": "https://api.airtable.com/v0",
+    "auth": {
+      "mode": "credential",
+      "credential_name": "Airtable API",
+      "credential_type": "n8n-nodes-base.airtable"
+    },
+    "endpoints": {
+      "create_record": {
+        "path": "/{baseId}/{tableName}",
+        "method": "POST",
+        "request_map": {
+          "fields": "record_data"
+        },
+        "response_map": {
+          "id": "record_id"
+        }
+      },
+      "update_record": {
+        "path": "/{baseId}/{tableName}/{recordId}",
+        "method": "PATCH",
+        "request_map": {
+          "fields": "record_data"
+        },
+        "response_map": {
+          "id": "record_id"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/airtable_record.json",
+      "schema": "./schemas/crm_record.schema.json"
+    },
+    "modules_using": ["module_01_enterprise", "module_02_enterprise"]
+  },
+  {
+    "id": "slack_webhook",
+    "type": "notification",
+    "name": "Slack Webhook",
+    "base_url": "{{$env.NOTIFICATION_WEBHOOK_URL}}",
+    "auth": {
+      "mode": "none"
+    },
+    "endpoints": {
+      "send_notification": {
+        "path": "",
+        "method": "POST",
+        "request_map": {
+          "text": "message",
+          "priority": "priority"
+        },
+        "response_map": {
+          "ok": "success"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/slack_notification.json",
+      "schema": "./schemas/notification.schema.json"
+    },
+    "modules_using": ["module_01_core", "module_02_core", "module_03_core", "module_04_core", "module_05_core", "module_06_core", "module_07_core", "module_01_enterprise", "module_02_enterprise", "module_03_enterprise", "module_04_enterprise", "module_05_enterprise", "module_06_enterprise", "module_07_enterprise"]
+  },
+  {
+    "id": "module_webhook",
+    "type": "internal",
+    "name": "N8N Module Webhook",
+    "base_url": "{{$env.N8N_BASE_URL}}",
+    "auth": {
+      "mode": "apiKey",
+      "key_env": "MODULE_API_KEY",
+      "optional": true
+    },
+    "endpoints": {
+      "intake_lead": {
+        "path": "/webhook/intake-lead",
+        "method": "POST",
+        "module": "module_01"
+      },
+      "consult_booking": {
+        "path": "/webhook/consult-booking",
+        "method": "POST",
+        "module": "module_02"
+      },
+      "telehealth_session": {
+        "path": "/webhook/telehealth-session",
+        "method": "POST",
+        "module": "module_03"
+      },
+      "billing_payment": {
+        "path": "/webhook/billing-payment",
+        "method": "POST",
+        "module": "module_04"
+      },
+      "followup_campaign": {
+        "path": "/webhook/followup-campaign",
+        "method": "POST",
+        "module": "module_05"
+      },
+      "document_process": {
+        "path": "/webhook/document-process",
+        "method": "POST",
+        "module": "module_06"
+      },
+      "generate_report": {
+        "path": "/webhook/generate-report",
+        "method": "POST",
+        "module": "module_07"
+      },
+      "send_message": {
+        "path": "/webhook/send-message",
+        "method": "POST",
+        "module": "module_08"
+      },
+      "log_event": {
+        "path": "/webhook/log-event",
+        "method": "POST",
+        "module": "module_09"
+      },
+      "orchestrate": {
+        "path": "/webhook/orchestrate",
+        "method": "POST",
+        "module": "module_10"
+      }
+    },
+    "mock": {
+      "file": "./mocks/module_webhook_response.json",
+      "schema": "./schemas/module_response.schema.json"
+    },
+    "modules_using": ["module_10_core", "module_10_enterprise", "module_05_enterprise"]
+  }
+]

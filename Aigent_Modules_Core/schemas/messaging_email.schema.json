@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Messaging Email Schema",
+  "required": ["message_id", "status"],
+  "properties": {
+    "message_id": {"type": "string"},
+    "status": {"type": "string", "enum": ["delivered", "queued", "failed"]},
+    "from": {"type": "string", "format": "email"},
+    "to": {"type": "string", "format": "email"},
+    "subject": {"type": "string"},
+    "sent_at": {"type": "string", "format": "date-time"}
+  }
+}

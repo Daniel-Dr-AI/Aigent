@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Calendar Availability Schema",
+  "required": ["slots"],
+  "properties": {
+    "slots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["time", "available"],
+        "properties": {
+          "id": {"type": "string"},
+          "time": {"type": "string", "format": "date-time"},
+          "start": {"type": "string", "format": "date-time"},
+          "end": {"type": "string", "format": "date-time"},
+          "duration": {"type": "number"},
+          "available": {"type": "boolean"}
+        }
+      }
+    },
+    "date": {"type": "string", "format": "date"},
+    "timezone": {"type": "string"}
+  }
+}
