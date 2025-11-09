@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return {body: $input.item.json.body || {}, trace_id: `DOC-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
+        "jsCode": "// CORE V2: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nreturn {body: body, trace_id: `DOC-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
       },
       "id": "metadata",
       "name": "Add Metadata",

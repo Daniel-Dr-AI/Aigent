@@ -22,7 +22,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.item.json.body || {};\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `SESSION-${timestamp}-${random}`,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// CORE V2: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `SESSION-${timestamp}-${random}`,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "add-metadata",
       "name": "Add Metadata",
