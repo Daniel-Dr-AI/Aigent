@@ -164,7 +164,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Data normalization with PHI masking\nconst body = $input.item.json.body || {};\nconst metadata = $input.item.json._metadata;\n\n// Normalize data\nconst nameParts = (body.name || '').trim().split(/\\s+/).filter(p => p.length > 0);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';\n\nconst phoneNormalized = (body.phone || '').replace(/\\D/g, '');\nconst phoneDisplay = body.phone || '';\nconst emailNormalized = (body.email || '').toLowerCase().trim();\n\n// PHI masking functions\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***' + (local[local.length-1] || '') + '@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = phone.replace(/\\D/g, '');\n  if (digits.length < 4) return '***';\n  return '+X-XXX-XXX-' + digits.slice(-4);\n};\n\nconst maskName = (name) => {\n  if (!name) return '';\n  const parts = name.split(/\\s+/);\n  return parts.map(p => p[0] + '***').join(' ');\n};\n\nreturn {\n  _metadata: metadata,\n  data: {\n    trace_id: metadata.trace_id,\n    name: body.name,\n    first_name: firstName,\n    last_name: lastName,\n    email: emailNormalized,\n    phone: phoneNormalized,\n    phone_display: phoneDisplay,\n    service_type: body.service_type || 'Consultation',\n    preferred_date: body.preferred_date || null,\n    preferred_time: body.preferred_time || null,\n    timezone: body.timezone || $env.CLINIC_TIMEZONE || 'America/New_York',\n    notes: body.notes || '',\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  data_masked: {\n    name: maskName(body.name),\n    email: maskEmail(emailNormalized),\n    phone: maskPhone(phoneDisplay),\n    service_type: body.service_type || 'Consultation'\n  }\n};"
+        "jsCode": "// ENTERPRISE: Data normalization with PHI masking\n\n// ENTERPRISE: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst metadata = $input.item.json._metadata;\n\n// Normalize data\nconst nameParts = (body.name || '').trim().split(/\\s+/).filter(p => p.length > 0);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';\n\nconst phoneNormalized = (body.phone || '').replace(/\\D/g, '');\nconst phoneDisplay = body.phone || '';\nconst emailNormalized = (body.email || '').toLowerCase().trim();\n\n// PHI masking functions\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***' + (local[local.length-1] || '') + '@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = phone.replace(/\\D/g, '');\n  if (digits.length < 4) return '***';\n  return '+X-XXX-XXX-' + digits.slice(-4);\n};\n\nconst maskName = (name) => {\n  if (!name) return '';\n  const parts = name.split(/\\s+/);\n  return parts.map(p => p[0] + '***').join(' ');\n};\n\nreturn {\n  _metadata: metadata,\n  data: {\n    trace_id: metadata.trace_id,\n    name: body.name,\n    first_name: firstName,\n    last_name: lastName,\n    email: emailNormalized,\n    phone: phoneNormalized,\n    phone_display: phoneDisplay,\n    service_type: body.service_type || 'Consultation',\n    preferred_date: body.preferred_date || null,\n    preferred_time: body.preferred_time || null,\n    timezone: body.timezone || $env.CLINIC_TIMEZONE || 'America/New_York',\n    notes: body.notes || '',\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  data_masked: {\n    name: maskName(body.name),\n    email: maskEmail(emailNormalized),\n    phone: maskPhone(phoneDisplay),\n    service_type: body.service_type || 'Consultation'\n  }\n};"
       },
       "id": "normalize-data",
       "name": "Normalize & Mask Data",
@@ -172,6 +172,70 @@
       "typeVersion": 2,
       "position": [1200, 180],
       "notes": "ENTERPRISE: Data processing + PHI masking\nSECURITY: Masked versions for logs"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_02_enterprise"
+            },
+            {
+              "name": "service_type",
+              "value": "calendar"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-calendar-connector",
+      "name": "Resolve Calendar Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 140],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "notes": "M11A: Resolve calendar connector\nENTERPRISE: Integrated with Module 11A\nRETRY: 3 attempts with backoff"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'calcom' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "check_availability"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { date: $('Normalize & Mask Data').first().json.data.preferred_date || $now.plus({days: 1}).toFormat('yyyy-MM-dd'), duration: parseInt($env.DEFAULT_APPOINTMENT_DURATION) || 30, service_type: $('Normalize & Mask Data').first().json.data.service_type } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-calendar-availability",
+      "name": "Execute Calendar Availability (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 180],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "notes": "M11A: Execute calendar availability check\nENTERPRISE: Integrated with Module 11A\nRETRY: 3 attempts with backoff"
     },
     {
       "parameters": {
@@ -198,25 +262,24 @@
           "timeout": 10000
         }
       },
-      "id": "check-availability",
-      "name": "Check Calendar Availability",
+      "id": "check-availability-legacy",
+      "name": "Check Calendar Availability (Legacy - DISABLED)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1400, 180],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "notes": "ENTERPRISE: Calendar API with retry\nRETRY: 3 attempts with backoff"
+      "position": [1400, 220],
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A integration\nENTERPRISE features preserved in M11A nodes\nRETAINED: For rollback capability"
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Intelligent slot selection\nconst slots = $input.first().json.slots || [];\nconst normalizedData = $('Normalize & Mask Data').first().json.data;\nconst preferredTime = normalizedData.preferred_time;\n\nif (slots.length === 0) {\n  return { \n    error: true, \n    message: 'No available appointments',\n    retry_after: new Date(Date.now() + 86400000).toISOString()\n  };\n}\n\n// If preferred time specified, try to match\nlet selected = slots[0]; // default to first\n\nif (preferredTime) {\n  const preferred = slots.find(s => {\n    const slotTime = (s.time || s.start || '').substring(11, 16); // Extract HH:MM\n    return slotTime === preferredTime;\n  });\n  if (preferred) {\n    selected = preferred;\n  }\n}\n\nreturn {\n  slot_time: selected.time || selected.start,\n  slot_id: selected.id || selected.time,\n  duration: selected.duration || parseInt($env.DEFAULT_APPOINTMENT_DURATION) || 30,\n  preference_matched: preferredTime && selected.time?.includes(preferredTime)\n};"
+        "jsCode": "// ENTERPRISE: Intelligent slot selection with M11A response normalization\n\nconst response = $input.first().json;\n// M11A response normalization\nlet data = response.data || response;\nconst slots = data.slots || [];\n\nconst normalizedData = $('Normalize & Mask Data').first().json.data;\nconst preferredTime = normalizedData.preferred_time;\n\nif (slots.length === 0) {\n  return { \n    error: true, \n    message: 'No available appointments',\n    retry_after: new Date(Date.now() + 86400000).toISOString()\n  };\n}\n\n// If preferred time specified, try to match\nlet selected = slots[0]; // default to first\n\nif (preferredTime) {\n  const preferred = slots.find(s => {\n    const slotTime = (s.time || s.start || '').substring(11, 16); // Extract HH:MM\n    return slotTime === preferredTime;\n  });\n  if (preferred) {\n    selected = preferred;\n  }\n}\n\nreturn {\n  slot_time: selected.time || selected.start,\n  slot_id: selected.id || selected.time,\n  duration: selected.duration || parseInt($env.DEFAULT_APPOINTMENT_DURATION) || 30,\n  preference_matched: preferredTime && selected.time?.includes(preferredTime)\n};"
       },
       "id": "select-slot",
       "name": "Select Best Slot",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1600, 180],
-      "notes": "ENTERPRISE: Preference-based slot matching\nINTELLIGENCE: Matches preferred time if available"
+      "notes": "ENTERPRISE: Preference-based slot matching\nM11A: Response normalization support\nINTELLIGENCE: Matches preferred time if available"
     },
     {
       "parameters": {
@@ -235,6 +298,51 @@
       "typeVersion": 2,
       "position": [1800, 180],
       "notes": "Routes to error if no slots available"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $('Resolve Calendar Connector (M11A)').first().json.primary_connector?.id || 'calcom' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "create_booking"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { name: $('Normalize & Mask Data').first().json.data.name, email: $('Normalize & Mask Data').first().json.data.email, phone: $('Normalize & Mask Data').first().json.data.phone_display, service_type: $('Normalize & Mask Data').first().json.data.service_type, start_time: $json.slot_time, duration: $json.duration, timezone: $('Normalize & Mask Data').first().json.data.timezone, notes: $('Normalize & Mask Data').first().json.data.notes } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 15000}}"
+        }
+      },
+      "id": "execute-calendar-booking",
+      "name": "Execute Calendar Booking (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 120],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "notes": "M11A: Execute calendar booking creation\nENTERPRISE: Integrated with Module 11A\nRETRY: 3 attempts for reliability"
+    },
+    {
+      "parameters": {
+        "jsCode": "// M11A response normalization\nconst response = $input.first().json;\nlet booking = response.data || response;\nreturn booking;"
+      },
+      "id": "normalize-booking-response",
+      "name": "Normalize Booking Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 0],
+      "notes": "M11A: Response normalization\nHandles both M11A and legacy formats"
     },
     {
       "parameters": {
@@ -281,14 +389,13 @@
           "timeout": 15000
         }
       },
-      "id": "create-booking",
-      "name": "Create Booking",
+      "id": "create-booking-legacy",
+      "name": "Create Booking (Legacy - DISABLED)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 120],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "notes": "ENTERPRISE: Booking creation with retry\nRETRY: 3 attempts for reliability"
+      "position": [2000, 160],
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A integration\nENTERPRISE features preserved in M11A nodes\nRETAINED: For rollback capability"
     },
     {
       "parameters": {
@@ -374,6 +481,72 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_02_enterprise"
+            },
+            {
+              "name": "service_type",
+              "value": "notification"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-notification-connector",
+      "name": "Resolve Notification Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 160],
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11A: Resolve notification connector\nENTERPRISE: Integrated with Module 11A\nRETRY: 2 attempts, non-blocking"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'slack_webhook' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_notification"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { text: '📅 New Appointment Booked\\n👤 ' + $('Normalize & Mask Data').first().json.data_masked.name + '\\n📧 ' + $('Normalize & Mask Data').first().json.data_masked.email + '\\n📱 ' + $('Normalize & Mask Data').first().json.data_masked.phone + '\\n🏥 ' + $('Normalize & Mask Data').first().json.data_masked.service_type + '\\n📅 ' + $('Select Best Slot').first().json.slot_time + '\\n✅ Preferred time: ' + ($('Select Best Slot').first().json.preference_matched ? 'Matched' : 'Alternative offered') + '\\n🆔 ' + $('Normalize & Mask Data').first().json.data.trace_id } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-notification",
+      "name": "Execute Notification (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 200],
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11A: Execute notification connector\nENTERPRISE: PHI masking preserved (uses data_masked)\nSECURITY: HIPAA-safe notification content"
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
@@ -388,15 +561,81 @@
           "timeout": 5000
         }
       },
-      "id": "notify-staff",
-      "name": "Notify Staff (Masked)",
+      "id": "notify-staff-legacy",
+      "name": "Notify Staff (Legacy - DISABLED)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2200, 200],
-      "continueOnFail": true,
+      "position": [2200, 240],
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A integration\nENTERPRISE features preserved in M11A nodes\nRETAINED: For rollback capability"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_02_enterprise"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-messaging-connector",
+      "name": "Resolve Messaging Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 280],
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "ENTERPRISE: Notification with PHI masking\nSECURITY: Uses data_masked"
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11A: Resolve messaging connector\nENTERPRISE: Integrated with Module 11A\nDISABLED: Enable when configured\nRETRY: 2 attempts, non-blocking"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Normalize & Mask Data').first().json.data.email, from: $env.SENDGRID_FROM_EMAIL || 'noreply@example.com', subject: 'Appointment Confirmed - ' + ($env.CLINIC_NAME || 'Our Clinic'), text: 'Hi ' + $('Normalize & Mask Data').first().json.data.first_name + ',\\n\\nYour appointment has been confirmed!\\n\\n📅 Service: ' + $('Normalize & Mask Data').first().json.data.service_type + '\\n🕐 Date & Time: ' + $('Select Best Slot').first().json.slot_time + '\\n⏱️ Duration: ' + $('Select Best Slot').first().json.duration + ' minutes\\n📍 Location: ' + ($env.CLINIC_NAME || 'Our Office') + '\\n\\n🎟️ Confirmation Number: ' + $('Normalize & Mask Data').first().json.data.trace_id.substring(0, 8).toUpperCase() + '\\n\\nQuestions? Call us at ' + ($env.CLINIC_PHONE || '555-0000') + '\\n\\nThank you!' } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-messaging",
+      "name": "Execute Messaging (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 320],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11A: Execute messaging connector\nENTERPRISE: Email confirmation\nDATA: Uses full (unmasked) data for recipient\nDISABLED: Enable when configured"
     },
     {
       "parameters": {
@@ -408,16 +647,13 @@
         "message": "=Hi {{ $('Normalize & Mask Data').first().json.data.first_name }},\n\nYour appointment has been confirmed!\n\n📅 Service: {{ $('Normalize & Mask Data').first().json.data.service_type }}\n🕐 Date & Time: {{ $('Select Best Slot').first().json.slot_time }}\n⏱️ Duration: {{ $('Select Best Slot').first().json.duration }} minutes\n📍 Location: {{$env.CLINIC_NAME || 'Our Office'}}\n\n🎟️ Confirmation Number: {{ $('Normalize & Mask Data').first().json.data.trace_id.substring(0, 8).toUpperCase() }}\n\nQuestions? Call us at {{$env.CLINIC_PHONE || '555-0000'}}\n\nThank you!",
         "options": {}
       },
-      "id": "send-email",
-      "name": "Send Email Confirmation",
+      "id": "send-email-legacy",
+      "name": "Send Email Confirmation (Legacy - DISABLED)",
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
-      "position": [2200, 280],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "continueOnFail": true,
+      "position": [2200, 360],
       "disabled": true,
-      "notes": "ENTERPRISE: Email confirmation\nDISABLED: Enable when SendGrid connected"
+      "notes": "DISABLED: Replaced by Module 11A integration\nENTERPRISE features preserved in M11A nodes\nRETAINED: For rollback capability"
     },
     {
       "parameters": {
@@ -486,7 +722,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Detailed validation error messages\nconst body = $input.item.json.body || {};\nconst errors = [];\n\nif (!body.name || body.name.length < 2) {\n  errors.push('name (minimum 2 characters required)');\n}\n\nif (!body.email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email (valid email format required)');\n}\n\nconst phoneDigits = (body.phone || '').replace(/\\D/g, '');\nif (!body.phone || phoneDigits.length < 7) {\n  errors.push('phone (minimum 7 digits required)');\n}\n\nif (!body.service_type) {\n  errors.push('service_type (required)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid required fields: ${errors.join(', ')}`\n  : 'Please provide valid name, email, phone, and service type';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// ENTERPRISE: Detailed validation error messages\n\n// ENTERPRISE: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst errors = [];\n\nif (!body.name || body.name.length < 2) {\n  errors.push('name (minimum 2 characters required)');\n}\n\nif (!body.email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email (valid email format required)');\n}\n\nconst phoneDigits = (body.phone || '').replace(/\\D/g, '');\nif (!body.phone || phoneDigits.length < 7) {\n  errors.push('phone (minimum 7 digits required)');\n}\n\nif (!body.service_type) {\n  errors.push('service_type (required)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid required fields: ${errors.join(', ')}`\n  : 'Please provide valid name, email, phone, and service type';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "format-error",
       "name": "Format Validation Error",
@@ -542,9 +778,12 @@
       ]
     },
     "Normalize & Mask Data": {
-      "main": [[{"node": "Check Calendar Availability"}]]
+      "main": [[{"node": "Resolve Calendar Connector (M11A)"}]]
     },
-    "Check Calendar Availability": {
+    "Resolve Calendar Connector (M11A)": {
+      "main": [[{"node": "Execute Calendar Availability (M11A)"}]]
+    },
+    "Execute Calendar Availability (M11A)": {
       "main": [[{"node": "Select Best Slot"}]]
     },
     "Select Best Slot": {
@@ -553,17 +792,26 @@
     "Check Slot Found": {
       "main": [
         [{"node": "Return No Availability"}],
-        [{"node": "Create Booking"}]
+        [{"node": "Execute Calendar Booking (M11A)"}]
       ]
     },
-    "Create Booking": {
+    "Execute Calendar Booking (M11A)": {
+      "main": [[{"node": "Normalize Booking Response"}]]
+    },
+    "Normalize Booking Response": {
       "main": [[
         {"node": "Log to Google Sheets"},
         {"node": "Upsert to CRM"},
-        {"node": "Notify Staff (Masked)"},
-        {"node": "Send Email Confirmation"},
+        {"node": "Resolve Notification Connector (M11A)"},
+        {"node": "Resolve Messaging Connector (M11A)"},
         {"node": "Format Success Response"}
       ]]
+    },
+    "Resolve Notification Connector (M11A)": {
+      "main": [[{"node": "Execute Notification (M11A)"}]]
+    },
+    "Resolve Messaging Connector (M11A)": {
+      "main": [[{"node": "Execute Messaging (M11A)"}]]
     },
     "Format Success Response": {
       "main": [[{"node": "Return Success"}]]
@@ -597,10 +845,15 @@
     }
   ],
   "meta": {
-    "version": "enterprise-1.0.0",
+    "version": "enterprise-1.1.0",
     "branch": "Enterprise",
-    "description": "Aigent Module 02 ENTERPRISE: Secure consult booking with HIPAA compliance, authentication, PHI masking, preference matching, and advanced observability.",
+    "description": "Aigent Module 02 ENTERPRISE: Secure consult booking with HIPAA compliance, authentication, PHI masking, Module 11A integration, preference matching, and advanced observability.",
     "target_users": "Medical practices, telehealth providers, healthcare organizations requiring HIPAA compliance",
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "connectors_registry.json"
+    ],
     "features": [
       "API key authentication (optional)",
       "PHI masking in logs/notifications",
@@ -695,6 +948,32 @@
       "core_features": "Basic booking, simple validation, first-available slot",
       "enterprise_features": "+Auth, +PHI masking, +Preference matching, +CRM, +Tracking"
     },
-    "notes": "BALANCED ENTERPRISE: Essential security (auth, PHI masking) + intelligent slot matching + observability without over-engineering. Uses native n8n nodes. Optional features disabled by default."
+    "notes": "BALANCED ENTERPRISE: Essential security (auth, PHI masking) + intelligent slot matching + observability without over-engineering. Uses native n8n nodes. Optional features disabled by default.",
+    "v1.1.0_improvements": [
+      "Integrated Module 11A connectors for calendar, notification, and messaging",
+      "Added Resolve Calendar Connector (M11A) node",
+      "Added Execute Calendar Availability (M11A) node",
+      "Added Execute Calendar Booking (M11A) node",
+      "Added Normalize Booking Response node for M11A format",
+      "Added Resolve Notification Connector (M11A) node",
+      "Added Execute Notification (M11A) node with PHI masking preserved",
+      "Added Resolve Messaging Connector (M11A) node (disabled)",
+      "Added Execute Messaging (M11A) node (disabled)",
+      "Legacy nodes preserved (disabled) for rollback",
+      "Updated connections to route through M11A",
+      "Updated Select Best Slot node with M11A response normalization",
+      "Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "All Enterprise features preserved (auth, PHI masking, preference matching, execution tracking)"
+    ],
+    "m11a_integration": {
+      "status": "complete",
+      "connectors_integrated": ["calendar", "notification", "messaging"],
+      "calendar_status": "enabled",
+      "notification_status": "enabled",
+      "messaging_status": "disabled_by_default",
+      "legacy_nodes_preserved": true,
+      "backward_compatible": true,
+      "enterprise_features_preserved": ["api_key_auth", "phi_masking", "preference_matching", "execution_tracking", "client_ip_tracking"]
+    }
   }
 }

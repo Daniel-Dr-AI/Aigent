@@ -100,7 +100,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE V2: Pre-validation to prevent IF node .length expression bug\n// Enhanced validation with detailed error tracking\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Name validation with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length < 2) {\n  errors.push('name_min_length');\n}\n\n// Email validation with regex\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n}\n\n// Phone validation with digit count check\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n} else {\n  const phoneDigits = body.phone.replace(/\\D/g, '');\n  if (phoneDigits.length < 7) {\n    errors.push('phone_min_length');\n  }\n}\n\n// Return validation result\nreturn {\n  ...($input.item.json),\n  _validation: {\n    valid: errors.length === 0,\n    errors: errors,\n    validated_at: Date.now()\n  }\n};"
+        "jsCode": "// ENTERPRISE V2: Pre-validation to prevent IF node .length expression bug\n// Enhanced validation with detailed error tracking\n\n// ENTERPRISE: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst errors = [];\n\n// Name validation with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length < 2) {\n  errors.push('name_min_length');\n}\n\n// Email validation with regex\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n}\n\n// Phone validation with digit count check\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n} else {\n  const phoneDigits = body.phone.replace(/\\D/g, '');\n  if (phoneDigits.length < 7) {\n    errors.push('phone_min_length');\n  }\n}\n\n// Return validation result\nreturn {\n  ...($input.item.json),\n  _validation: {\n    valid: errors.length === 0,\n    errors: errors,\n    validated_at: Date.now()\n  }\n};"
       },
       "id": "pre-validation",
       "name": "Pre-Validation",
@@ -140,7 +140,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Data normalization with PHI masking\nconst body = $input.item.json.body || {};\nconst metadata = $input.item.json._metadata;\n\n// Name parsing\nconst nameParts = (body.name || '').trim().split(/\\s+/).filter(p => p.length > 0);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';\n\n// Phone normalization\nconst phoneNormalized = (body.phone || '').replace(/\\D/g, '');\nconst phoneDisplay = body.phone || '';\n\n// Email normalization\nconst emailNormalized = (body.email || '').toLowerCase().trim();\n\n// PHI MASKING for logs/notifications\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***' + (local[local.length-1] || '') + '@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = phone.replace(/\\D/g, '');\n  if (digits.length < 4) return '***';\n  return '+X-XXX-XXX-' + digits.slice(-4);\n};\n\nconst maskName = (name) => {\n  if (!name) return '';\n  const parts = name.split(/\\s+/);\n  return parts.map(p => p[0] + '***').join(' ');\n};\n\n// Lead scoring algorithm\nconst interestScores = {\n  'urgent': 10, 'emergency': 10, 'consultation': 7,\n  'general': 5, 'inquiry': 3\n};\n\nconst referralScores = {\n  'physician referral': 10, 'patient referral': 9,\n  'google search': 7, 'google ads': 6, 'direct': 4\n};\n\nconst interestLower = (body.interest || '').toLowerCase();\nconst referralLower = (body.referral_source || '').toLowerCase();\n\nlet leadScore = 5;\nfor (const [key, score] of Object.entries(interestScores)) {\n  if (interestLower.includes(key)) {\n    leadScore = Math.max(leadScore, score);\n    break;\n  }\n}\n\nfor (const [key, score] of Object.entries(referralScores)) {\n  if (referralLower.includes(key)) {\n    leadScore += Math.floor(score / 2);\n    break;\n  }\n}\n\nleadScore = Math.min(leadScore, 10);\n\nreturn {\n  _metadata: metadata,\n  // Full data (for storage)\n  data: {\n    trace_id: metadata.trace_id,\n    name: body.name,\n    first_name: firstName,\n    last_name: lastName,\n    email: emailNormalized,\n    phone: phoneNormalized,\n    phone_display: phoneDisplay,\n    interest: body.interest || 'General Inquiry',\n    referral_source: body.referral_source || 'Direct',\n    notes: body.notes || '',\n    lead_score: leadScore,\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  // Masked data (for logs/notifications)\n  data_masked: {\n    name: maskName(body.name),\n    email: maskEmail(emailNormalized),\n    phone: maskPhone(phoneDisplay),\n    interest: body.interest || 'General Inquiry',\n    lead_score: leadScore\n  }\n};"
+        "jsCode": "// ENTERPRISE: Data normalization with PHI masking\n\n// ENTERPRISE: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst metadata = $input.item.json._metadata;\n\n// Name parsing\nconst nameParts = (body.name || '').trim().split(/\\s+/).filter(p => p.length > 0);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';\n\n// Phone normalization\nconst phoneNormalized = (body.phone || '').replace(/\\D/g, '');\nconst phoneDisplay = body.phone || '';\n\n// Email normalization\nconst emailNormalized = (body.email || '').toLowerCase().trim();\n\n// PHI MASKING for logs/notifications\nconst maskEmail = (email) => {\n  if (!email || !email.includes('@')) return email;\n  const [local, domain] = email.split('@');\n  return local[0] + '***' + (local[local.length-1] || '') + '@' + domain;\n};\n\nconst maskPhone = (phone) => {\n  const digits = phone.replace(/\\D/g, '');\n  if (digits.length < 4) return '***';\n  return '+X-XXX-XXX-' + digits.slice(-4);\n};\n\nconst maskName = (name) => {\n  if (!name) return '';\n  const parts = name.split(/\\s+/);\n  return parts.map(p => p[0] + '***').join(' ');\n};\n\n// Lead scoring algorithm\nconst interestScores = {\n  'urgent': 10, 'emergency': 10, 'consultation': 7,\n  'general': 5, 'inquiry': 3\n};\n\nconst referralScores = {\n  'physician referral': 10, 'patient referral': 9,\n  'google search': 7, 'google ads': 6, 'direct': 4\n};\n\nconst interestLower = (body.interest || '').toLowerCase();\nconst referralLower = (body.referral_source || '').toLowerCase();\n\nlet leadScore = 5;\nfor (const [key, score] of Object.entries(interestScores)) {\n  if (interestLower.includes(key)) {\n    leadScore = Math.max(leadScore, score);\n    break;\n  }\n}\n\nfor (const [key, score] of Object.entries(referralScores)) {\n  if (referralLower.includes(key)) {\n    leadScore += Math.floor(score / 2);\n    break;\n  }\n}\n\nleadScore = Math.min(leadScore, 10);\n\nreturn {\n  _metadata: metadata,\n  // Full data (for storage)\n  data: {\n    trace_id: metadata.trace_id,\n    name: body.name,\n    first_name: firstName,\n    last_name: lastName,\n    email: emailNormalized,\n    phone: phoneNormalized,\n    phone_display: phoneDisplay,\n    interest: body.interest || 'General Inquiry',\n    referral_source: body.referral_source || 'Direct',\n    notes: body.notes || '',\n    lead_score: leadScore,\n    client_ip: metadata.client_ip,\n    timestamp: metadata.timestamp\n  },\n  // Masked data (for logs/notifications)\n  data_masked: {\n    name: maskName(body.name),\n    email: maskEmail(emailNormalized),\n    phone: maskPhone(phoneDisplay),\n    interest: body.interest || 'General Inquiry',\n    lead_score: leadScore\n  }\n};"
       },
       "id": "normalize-enrich",
       "name": "Normalize & Enrich Data",
@@ -239,6 +239,72 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_01_enterprise"
+            },
+            {
+              "name": "service_type",
+              "value": "notification"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-notification-connector",
+      "name": "Resolve Notification Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 220],
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11A: Resolve notification connector\nENTERPRISE: Integrated with Module 11A\nRETRY: 2 attempts, non-blocking"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'slack_webhook' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_notification"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { text: '🆕 New Lead (Score: ' + $('Normalize & Enrich Data').first().json.data_masked.lead_score + '/10)\\n👤 Name: ' + $('Normalize & Enrich Data').first().json.data_masked.name + '\\n📧 Email: ' + $('Normalize & Enrich Data').first().json.data_masked.email + '\\n📱 Phone: ' + $('Normalize & Enrich Data').first().json.data_masked.phone + '\\n💡 Interest: ' + $('Normalize & Enrich Data').first().json.data_masked.interest + '\\n🆔 ID: ' + $('Normalize & Enrich Data').first().json._metadata.trace_id, priority: $('Normalize & Enrich Data').first().json.data.lead_score >= 8 ? 'high' : 'normal' } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-notification",
+      "name": "Execute Notification (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 260],
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11A: Execute notification connector\nENTERPRISE: PHI masking preserved (uses data_masked)\nSECURITY: HIPAA-safe notification content\nPRIORITY: High-score leads flagged"
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
         "sendBody": true,
         "bodyParameters": {
@@ -257,15 +323,81 @@
           "timeout": 5000
         }
       },
-      "id": "send-notification",
-      "name": "Send Notification (Masked)",
+      "id": "send-notification-legacy",
+      "name": "Send Notification (Legacy - DISABLED)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1400, 260],
-      "continueOnFail": true,
+      "position": [1400, 300],
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A integration\nENTERPRISE features preserved in M11A nodes\nRETAINED: For rollback capability"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_01_enterprise"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-messaging-connector",
+      "name": "Resolve Messaging Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 340],
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "ENTERPRISE: Notification with PHI masking\nSECURITY: Uses data_masked (HIPAA-safe)\nPRIORITY: High-score leads flagged\nOPTIONAL: Set NOTIFICATION_WEBHOOK_URL"
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11A: Resolve messaging connector\nENTERPRISE: Integrated with Module 11A\nDISABLED: Enable when configured\nRETRY: 2 attempts, non-blocking"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Normalize & Enrich Data').first().json.data.email, from: $env.SENDGRID_FROM_EMAIL || 'noreply@example.com', subject: 'Thank you for your inquiry!', text: 'Hi ' + $('Normalize & Enrich Data').first().json.data.first_name + ',\\n\\nThank you for contacting us regarding ' + $('Normalize & Enrich Data').first().json.data.interest + '. We\\'ve received your information and will get back to you within 24 hours.\\n\\nBest regards,\\n' + ($env.CLINIC_NAME || 'The Team') } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-messaging",
+      "name": "Execute Messaging (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 380],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11A: Execute messaging connector\nENTERPRISE: Auto-reply confirmation\nDATA: Uses full (unmasked) data for recipient\nDISABLED: Enable when configured"
     },
     {
       "parameters": {
@@ -277,16 +409,13 @@
         "message": "=Hi {{ $json.data.first_name }},\n\nThank you for contacting us regarding {{ $json.data.interest }}. We've received your information and will get back to you within 24 hours.\n\nBest regards,\n{{$env.CLINIC_NAME || 'The Team'}}",
         "options": {}
       },
-      "id": "send-email",
-      "name": "Send Auto-Reply Email",
+      "id": "send-email-legacy",
+      "name": "Send Auto-Reply Email (Legacy - DISABLED)",
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
-      "position": [1400, 340],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "continueOnFail": true,
+      "position": [1400, 420],
       "disabled": true,
-      "notes": "ENTERPRISE: Auto-reply confirmation\nDISABLED: Enable when SendGrid configured\nRETRY: 2 attempts, non-blocking\nDATA: Uses full (unmasked) data for recipient"
+      "notes": "DISABLED: Replaced by Module 11A integration\nENTERPRISE features preserved in M11A nodes\nRETAINED: For rollback capability"
     },
     {
       "parameters": {
@@ -332,7 +461,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Detailed validation error messages\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Check each field and provide specific feedback\nif (!body.name || body.name.length < 2) {\n  errors.push('name (minimum 2 characters required)');\n}\n\nif (!body.email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email (valid email format required)');\n}\n\nconst phoneDigits = (body.phone || '').replace(/\\D/g, '');\nif (!body.phone || phoneDigits.length < 7) {\n  errors.push('phone (minimum 7 digits required)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid required fields: ${errors.join(', ')}`\n  : 'Please provide valid name, email, and phone';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// ENTERPRISE: Detailed validation error messages\n\n// ENTERPRISE: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst errors = [];\n\n// Check each field and provide specific feedback\nif (!body.name || body.name.length < 2) {\n  errors.push('name (minimum 2 characters required)');\n}\n\nif (!body.email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email (valid email format required)');\n}\n\nconst phoneDigits = (body.phone || '').replace(/\\D/g, '');\nif (!body.phone || phoneDigits.length < 7) {\n  errors.push('phone (minimum 7 digits required)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid required fields: ${errors.join(', ')}`\n  : 'Please provide valid name, email, and phone';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "format-error",
       "name": "Format Validation Error",
@@ -394,9 +523,19 @@
       "main": [[
         {"node": "Save to Google Sheets", "type": "main", "index": 0},
         {"node": "Upsert to CRM (Airtable)", "type": "main", "index": 0},
-        {"node": "Send Notification (Masked)", "type": "main", "index": 0},
-        {"node": "Send Auto-Reply Email", "type": "main", "index": 0},
+        {"node": "Resolve Notification Connector (M11A)", "type": "main", "index": 0},
+        {"node": "Resolve Messaging Connector (M11A)", "type": "main", "index": 0},
         {"node": "Format Success Response", "type": "main", "index": 0}
+      ]]
+    },
+    "Resolve Notification Connector (M11A)": {
+      "main": [[
+        {"node": "Execute Notification (M11A)", "type": "main", "index": 0}
+      ]]
+    },
+    "Resolve Messaging Connector (M11A)": {
+      "main": [[
+        {"node": "Execute Messaging (M11A)", "type": "main", "index": 0}
       ]]
     },
     "Format Success Response": {
@@ -431,10 +570,15 @@
     }
   ],
   "meta": {
-    "version": "enterprise-1.0.0",
+    "version": "enterprise-1.1.0",
     "branch": "Enterprise",
-    "description": "Aigent Module 01 ENTERPRISE: Secure intake/lead capture with HIPAA compliance, authentication, PHI masking, and advanced observability.",
+    "description": "Aigent Module 01 ENTERPRISE: Secure intake/lead capture with HIPAA compliance, authentication, PHI masking, Module 11A integration, and advanced observability.",
     "target_users": "Medical practices, telehealth providers, healthcare organizations requiring HIPAA compliance",
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "connectors_registry.json"
+    ],
     "features": [
       "API key authentication (optional)",
       "PHI masking in logs/notifications",
@@ -548,6 +692,27 @@
       "possible": true,
       "data_loss": "Lead scores will not be present in Core, but data is preserved"
     },
-    "notes": "BALANCED ENTERPRISE: Adds essential security (auth, PHI masking) and observability (execution tracking, lead scoring) without over-engineering. Uses native n8n nodes where possible. Optional features disabled by default for easy testing."
+    "notes": "BALANCED ENTERPRISE: Adds essential security (auth, PHI masking) and observability (execution tracking, lead scoring) without over-engineering. Uses native n8n nodes where possible. Optional features disabled by default for easy testing.",
+    "v1.1.0_improvements": [
+      "Integrated Module 11A connectors for notification and messaging",
+      "Added Resolve Notification Connector (M11A) node",
+      "Added Execute Notification (M11A) node with PHI masking preserved",
+      "Added Resolve Messaging Connector (M11A) node (disabled)",
+      "Added Execute Messaging (M11A) node (disabled)",
+      "Legacy nodes preserved (disabled) for rollback",
+      "Updated connections to route through M11A",
+      "Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "Response normalization support",
+      "All Enterprise features preserved (auth, PHI masking, lead scoring, execution tracking)"
+    ],
+    "m11a_integration": {
+      "status": "complete",
+      "connectors_integrated": ["notification", "messaging"],
+      "notification_status": "enabled",
+      "messaging_status": "disabled_by_default",
+      "legacy_nodes_preserved": true,
+      "backward_compatible": true,
+      "enterprise_features_preserved": ["api_key_auth", "phi_masking", "lead_scoring", "execution_tracking", "client_ip_tracking"]
+    }
   }
 }

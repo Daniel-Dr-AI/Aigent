@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.item.json.body || {};\nreturn {body: body, trace_id: `CAMPAIGN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
+        "jsCode": "// CORE V2: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nreturn {body: body, trace_id: `CAMPAIGN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
       },
       "id": "add-metadata",
       "name": "Add Metadata",
@@ -92,6 +92,70 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_05_core"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-messaging-connector",
+      "name": "Resolve Messaging Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Add Metadata').first().json.body.recipients[$item(0)], subject: $('Add Metadata').first().json.body.subject, body: $('Add Metadata').first().json.body.message.replace('{name}', $('Add Metadata').first().json.body.recipients[$item(0)].split('@')[0]) } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-messaging-connector",
+      "name": "Execute Messaging (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        240
+      ]
+    },
+    {
+      "parameters": {
         "operation": "send",
         "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $json.body.recipients[$item(0)] }}",
@@ -106,11 +170,13 @@
       "typeVersion": 1.1,
       "position": [
         1000,
-        240
+        480
       ],
       "retryOnFail": true,
       "maxTries": 2,
-      "continueOnFail": true
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A messaging connector integration"
     },
     {
       "parameters": {
@@ -259,7 +325,11 @@
     },
     "Split Recipients": {
       "main": [
-        null,
+        [
+          {
+            "node": "Resolve Messaging Connector (M11A)"
+          }
+        ],
         [
           {
             "node": "Format Success"
@@ -267,7 +337,16 @@
         ]
       ]
     },
-    "Send Email": {
+    "Resolve Messaging Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute Messaging (M11A)"
+          }
+        ]
+      ]
+    },
+    "Execute Messaging (M11A)": {
       "main": [
         [
           {
@@ -276,6 +355,7 @@
         ]
       ]
     },
+    "Send Email": {},
     "Log to Sheets": {
       "main": [
         [
@@ -321,22 +401,43 @@
     }
   ],
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "branch": "Core",
     "description": "Module 05 CORE: Email campaigns",
     "features": [
       "Batch email sending",
       "Campaign logging"
     ],
+    "required_vars": [
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL",
+      "MOCK_MODE_GLOBAL"
+    ],
+    "optional_vars": [
+      "SENDGRID_API_KEY",
+      "SENDGRID_FROM_EMAIL",
+      "DEFAULT_TIMEOUT_MS"
+    ],
     "performance": {
       "avg_execution_time_ms": 500,
-      "node_count": 9
+      "node_count": 12
     },
     "v2_improvements": [
       "Fixed CORS",
       "Improved trace_id",
       "Added error handler",
       "Verified batch loop"
+    ],
+    "v3_improvements": [
+      "Integrated Module 11A messaging connector (SendGrid)",
+      "Response normalization for M11A format",
+      "Mock/live mode switching support",
+      "Disabled legacy SendGrid node (backward compatibility)"
+    ],
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "Module 11C (Test Harness)"
     ]
   }
 }

@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "return {body: $input.item.json.body || {}, trace_id: `AUDIT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
+        "jsCode": "// CORE V2: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nreturn {body: body, trace_id: `AUDIT-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
       },
       "id": "metadata",
       "name": "Add Metadata",
@@ -192,8 +192,14 @@
   },
   "active": false,
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "description": "Module 09 CORE: Simple audit logging",
+    "required_vars": [
+      "GOOGLE_SHEET_ID"
+    ],
+    "optional_vars": [
+      "GOOGLE_SHEET_TAB"
+    ],
     "performance": {
       "avg_execution_time_ms": 300,
       "node_count": 6
@@ -202,6 +208,11 @@
       "CRITICAL: Added missing settings and tags keys",
       "Fixed CORS",
       "Improved trace_id"
+    ],
+    "v3_improvements": [
+      "Version bump to v1.2.0 for consistency",
+      "Module 09 uses Google Sheets API directly for audit log (no M11 integration needed)",
+      "Storage operations are already optimized"
     ]
   },
   "settings": {

@@ -1,0 +1,13 @@
+{
+  "id": "rec_mock_airtable_12345",
+  "record_id": "rec_mock_airtable_12345",
+  "createdTime": "2025-11-09T12:00:00.000Z",
+  "fields": {
+    "Name": "John Doe",
+    "Email": "john.doe@example.com",
+    "Phone": "+15551234567",
+    "Status": "New Lead",
+    "Source": "Website",
+    "Created": "2025-11-09"
+  }
+}

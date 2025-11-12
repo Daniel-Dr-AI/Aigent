@@ -71,7 +71,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Rich execution metadata\nconst executionStartTime = Date.now();\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst clientIP = headers['x-forwarded-for']?.split(',')[0].trim() || headers['x-real-ip'] || 'unknown';\nconst traceId = `DOC-${executionStartTime}-${Math.random().toString(36).substring(7)}`;\n\nlet body = input.body || {};\nif (Object.keys(body).length === 0 && input.file_url) {\n  body = {\n    file_url: input.file_url,\n    document_type: input.document_type,\n    patient_id: input.patient_id,\n    metadata: input.metadata\n  };\n}\n\nreturn {\n  body: body,\n  _metadata: {\n    trace_id: traceId,\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    workflow_version: 'enterprise-1.0.0',\n    module: 'document_ocr',\n    timestamp: new Date().toISOString()\n  }\n};"
+        "jsCode": "// ENTERPRISE: Rich execution metadata\nconst executionStartTime = Date.now();\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst clientIP = headers['x-forwarded-for']?.split(',')[0].trim() || headers['x-real-ip'] || 'unknown';\nconst traceId = `DOC-${executionStartTime}-${Math.random().toString(36).substring(7)}`;\n\nlet body = input.body || {};\nif (Object.keys(body).length === 0 && input.file_url) {\n  body = {\n    file_url: input.file_url,\n    document_type: input.document_type,\n    patient_id: input.patient_id,\n    metadata: input.metadata\n  };\n}\n\nreturn {\n  body: body,\n  _metadata: {\n    trace_id: traceId,\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    workflow_version: 'enterprise-1.1.0',\n    module: 'document_ocr',\n    timestamp: new Date().toISOString()\n  }\n};"
       },
       "id": "add-metadata",
       "name": "Add Execution Metadata",
@@ -110,7 +110,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.item.json.body || {};\nconst errors = [];\n\nif (!body.file_url) {\n  errors.push('file_url (required)');\n} else if (!/^https?:\\/\\//i.test(body.file_url)) {\n  errors.push('file_url (must be valid HTTP/HTTPS URL)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid fields: ${errors.join(', ')}`\n  : 'Please provide valid file_url';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  error_code: 'VALIDATION_ERROR',\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// ENTERPRISE: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst errors = [];\n\nif (!body.file_url) {\n  errors.push('file_url (required)');\n} else if (!/^https?:\\/\\//i.test(body.file_url)) {\n  errors.push('file_url (must be valid HTTP/HTTPS URL)');\n}\n\nconst errorMessage = errors.length > 0 \n  ? `Missing or invalid fields: ${errors.join(', ')}`\n  : 'Please provide valid file_url';\n\nreturn {\n  success: false,\n  error: errorMessage,\n  error_code: 'VALIDATION_ERROR',\n  validation_errors: errors,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "format-validation-error",
       "name": "Format Validation Error",
@@ -173,14 +173,69 @@
         "binaryPropertyName": "data",
         "options": {}
       },
-      "id": "google-vision-ocr",
-      "name": "Google Vision OCR",
-      "type": "n8n-nodes-base.googleCloudVision",
-      "typeVersion": 1,
+      "id": "resolve-ocr-connector",
+      "name": "Resolve OCR Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [1600, 280],
+      "notes": "M11A: Resolve Google Cloud Vision OCR connector",
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "module_id", "value": "module_06_enterprise"},
+            {"name": "service_type", "value": "ocr"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"}
+      }
+    },
+    {
+      "id": "execute-ocr",
+      "name": "Execute OCR (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1800, 280],
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "ENTERPRISE: OCR with retry\nPROVIDER: Google Cloud Vision\nRETRY: 2 attempts\nREQUIRES: Google Cloud Vision credential"
+      "notes": "M11A: Execute Google Vision OCR with retry",
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "connector_id", "value": "={{ $json.primary_connector?.id || 'google_vision_default' }}"},
+            {"name": "endpoint", "value": "text_detection"},
+            {"name": "payload", "value": "={{ { file_url: $('Download Document').first().json.body.file_url, document_type: $('Validate & Classify Document').first().json.file_info.document_type } }}"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 20000}}"}
+      }
+    },
+    {
+      "id": "normalize-ocr-response",
+      "name": "Normalize OCR Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 280],
+      "notes": "M11A: Normalize OCR response format",
+      "parameters": {
+        "jsCode": "// M11A response normalization for Google Vision OCR\nconst response = $input.first().json;\n\n// M11A format: response.data contains the OCR result\nlet ocr = response.data || response;\n\n// Return in expected format for downstream nodes\nreturn {\n  fullTextAnnotation: ocr.fullTextAnnotation || {},\n  textAnnotations: ocr.textAnnotations || [],\n  pages: ocr.pages || []\n};"
+      }
+    },
+    {
+      "id": "google-vision-ocr",
+      "name": "Google Vision OCR (Legacy - DISABLED)",
+      "type": "n8n-nodes-base.googleCloudVision",
+      "typeVersion": 1,
+      "position": [1600, 500],
+      "disabled": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "LEGACY: Replaced by M11A OCR connector - kept for rollback"
     },
     {
       "parameters": {
@@ -262,7 +317,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Format success response\nconst metadata = $json._metadata;\nconst data = $json.data;\nconst dataMasked = $json.data_masked;\n\nconst executionDuration = Date.now() - metadata.execution_start_time;\n\nlet performanceCategory = 'fast';\nif (executionDuration >= 10000) performanceCategory = 'slow';\nelse if (executionDuration >= 5000) performanceCategory = 'normal';\n\nreturn {\n  success: true,\n  message: 'Document processed successfully',\n  data: {\n    document_id: data.document_id,\n    document_type: data.document_type,\n    risk_level: data.risk_level,\n    ocr_confidence: data.ocr_confidence,\n    ocr_confidence_level: data.ocr_confidence_level,\n    phi_detected: data.phi_detected,\n    phi_types: data.phi_types,\n    extracted_fields_count: {\n      names: data.extracted.names.length,\n      dates: data.extracted.dates.length,\n      amounts: data.extracted.amounts.length,\n      phones: data.extracted.phones.length,\n      emails: data.extracted.emails.length\n    },\n    trace_id: metadata.trace_id\n  },\n  metadata: {\n    execution_time_ms: executionDuration,\n    performance: performanceCategory,\n    workflow_version: 'enterprise-1.0.0',\n    timestamp: metadata.timestamp\n  }\n};"
+        "jsCode": "// ENTERPRISE: Format success response\nconst metadata = $json._metadata;\nconst data = $json.data;\nconst dataMasked = $json.data_masked;\n\nconst executionDuration = Date.now() - metadata.execution_start_time;\n\nlet performanceCategory = 'fast';\nif (executionDuration >= 10000) performanceCategory = 'slow';\nelse if (executionDuration >= 5000) performanceCategory = 'normal';\n\nreturn {\n  success: true,\n  message: 'Document processed successfully',\n  data: {\n    document_id: data.document_id,\n    document_type: data.document_type,\n    risk_level: data.risk_level,\n    ocr_confidence: data.ocr_confidence,\n    ocr_confidence_level: data.ocr_confidence_level,\n    phi_detected: data.phi_detected,\n    phi_types: data.phi_types,\n    extracted_fields_count: {\n      names: data.extracted.names.length,\n      dates: data.extracted.dates.length,\n      amounts: data.extracted.amounts.length,\n      phones: data.extracted.phones.length,\n      emails: data.extracted.emails.length\n    },\n    trace_id: metadata.trace_id\n  },\n  metadata: {\n    execution_time_ms: executionDuration,\n    performance: performanceCategory,\n    workflow_version: 'enterprise-1.1.0',\n    timestamp: metadata.timestamp\n  }\n};"
       },
       "id": "format-success",
       "name": "Format Success Response",
@@ -327,8 +382,10 @@
     "Enhanced Validation": {"main": [[{"node": "Download Document"}], [{"node": "Format Validation Error"}]]},
     "Format Validation Error": {"main": [[{"node": "Return Validation Error"}]]},
     "Download Document": {"main": [[{"node": "Validate & Classify Document"}]]},
-    "Validate & Classify Document": {"main": [[{"node": "Google Vision OCR"}]]},
-    "Google Vision OCR": {"main": [[{"node": "Extract & Mask PHI"}]]},
+    "Validate & Classify Document": {"main": [[{"node": "Resolve OCR Connector (M11A)"}]]},
+    "Resolve OCR Connector (M11A)": {"main": [[{"node": "Execute OCR (M11A)"}]]},
+    "Execute OCR (M11A)": {"main": [[{"node": "Normalize OCR Response"}]]},
+    "Normalize OCR Response": {"main": [[{"node": "Extract & Mask PHI"}]]},
     "Extract & Mask PHI": {"main": [[
       {"node": "Log to Compliance (M09)"},
       {"node": "Log Document Processing"},
@@ -355,7 +412,7 @@
     {"id": "hipaa-ready", "name": "HIPAA-Ready"}
   ],
   "meta": {
-    "version": "enterprise-1.0.0",
+    "version": "enterprise-1.1.0",
     "branch": "Enterprise",
     "description": "Aigent Module 06 ENTERPRISE: Secure document capture & OCR with HIPAA compliance, PHI detection, advanced field extraction, and document classification.",
     "author": "Aigent Systems",
@@ -470,6 +527,57 @@
       "core_features": "Basic OCR, simple field extraction",
       "enterprise_features": "+Auth, +Classification, +Risk assessment, +PHI detection, +Advanced extraction, +Module 09 audit, +Observability"
     },
-    "notes": "ENTERPRISE GRADE: Critical security for document processing. Includes PHI detection, document classification, risk assessment, and Module 09 compliance integration. Recommended to enable API key authentication for production use."
+    "v1.1.0_improvements": {
+      "m11a_integration": {
+        "ocr_connector": "Google Cloud Vision OCR now routed through M11A connector manager",
+        "mock_mode_support": "Set MOCK_MODE_GLOBAL=true for testing without live APIs",
+        "response_normalization": "Added normalization layer for M11A response format",
+        "backward_compatibility": "Legacy nodes disabled but preserved for rollback"
+      },
+      "nodes_added": [
+        "Resolve OCR Connector (M11A)",
+        "Execute OCR (M11A)",
+        "Normalize OCR Response"
+      ],
+      "nodes_disabled": [
+        "Google Vision OCR (Legacy - DISABLED)"
+      ],
+      "enterprise_features_preserved": [
+        "API key authentication flow",
+        "Execution metadata tracking",
+        "PHI masking logic",
+        "Document classification",
+        "Risk assessment",
+        "Advanced field extraction",
+        "PHI detection",
+        "Module 09 compliance logging",
+        "Google Sheets audit logging",
+        "Observability integration"
+      ]
+    },
+    "m11a_integration": {
+      "status": "fully_integrated",
+      "version": "enterprise-1.1.0",
+      "integration_date": "2025-11-12",
+      "connectors_used": [
+        {"type": "ocr", "service": "Google Cloud Vision", "status": "enabled"}
+      ],
+      "dependencies": [
+        "module_11a_connector_manager.json",
+        "module_11b_mock_simulator.json",
+        "connectors_registry.json"
+      ],
+      "mock_mode": {
+        "enabled": "Set MOCK_MODE_GLOBAL=true",
+        "mock_ocr_text": "Mock document text content...",
+        "mock_confidence": 0.95
+      },
+      "testing": {
+        "test_ocr": "curl -X POST $N8N_BASE_URL/webhook/document-ocr -H 'Content-Type: application/json' -d '{\"file_url\": \"https://example.com/document.pdf\", \"document_type\": \"medical_record\"}'",
+        "mock_mode_test": "MOCK_MODE_GLOBAL=true <same curl command>",
+        "expected_response": "{\"success\": true, \"data\": {\"document_id\": \"...\", \"phi_detected\": true}}"
+      }
+    },
+    "notes": "ENTERPRISE GRADE: Critical security for document processing. Includes PHI detection, document classification, risk assessment, and Module 09 compliance integration. M11A integration adds flexibility and mock mode support while preserving all Enterprise security features. Recommended to enable API key authentication for production use."
   }
 }

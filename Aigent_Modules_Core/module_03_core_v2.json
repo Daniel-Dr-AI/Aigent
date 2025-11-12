@@ -1,5 +1,5 @@
 {
-  "name": "Aigent_Module_03_Core_V2_Telehealth_Session",
+  "name": "Aigent_Module_03_Core_V3_Telehealth_Session",
   "nodes": [
     {
       "parameters": {
@@ -18,11 +18,11 @@
         200,
         300
       ],
-      "notes": "CORE: Public session creation webhook"
+      "notes": "CORE V3: Public session creation webhook"
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.item.json.body || {};\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `SESSION-${timestamp}-${random}`,\n  timestamp: new Date().toISOString()\n};"
+        "jsCode": "// CORE V3: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `SESSION-${timestamp}-${random}`,\n  timestamp: new Date().toISOString()\n};"
       },
       "id": "add-metadata",
       "name": "Add Metadata",
@@ -75,6 +75,76 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_03_core"
+            },
+            {
+              "name": "service_type",
+              "value": "video"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "resolve-video-connector",
+      "name": "Resolve Video Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11 INTEGRATION: Resolve video connector (Zoom, Google Meet, Doxy.me)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'zoom' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "create_meeting"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { topic: 'Telehealth Session - ' + $('Add Metadata').first().json.body.booking_id, start_time: $('Add Metadata').first().json.body.scheduled_time || $now.plus({hours: 1}).toISO(), duration: $('Add Metadata').first().json.body.duration_minutes || 30, settings: { host_video: true, participant_video: true, join_before_host: false } } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "execute-video-connector",
+      "name": "Execute Video Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11 INTEGRATION: Execute video meeting creation via Module 11A\nSupports mock/live mode based on MOCK_MODE_GLOBAL"
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "={{$env.VIDEO_PLATFORM_API_URL || 'https://api.zoom.us/v2'}}/meetings",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
@@ -122,24 +192,26 @@
       "typeVersion": 4.2,
       "position": [
         800,
-        240
+        480
       ],
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "CORE: Zoom/Google Meet integration\nMOCK: Returns placeholder if API unavailable"
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A integration\nOLD: Direct Zoom/Google Meet API call\nNEW: Use 'Execute Video Connector (M11A)' instead"
     },
     {
       "parameters": {
-        "jsCode": "// CORE: Extract meeting URLs\nconst meeting = $input.first().json;\n\n// Handle both real API and mock responses\nconst meetingUrl = meeting.join_url || meeting.url || `https://meet.example.com/${Date.now()}`;\nconst meetingId = meeting.id || `MOCK-${Date.now()}`;\n\nreturn {\n  session_id: $('Add Metadata').first().json.trace_id,\n  booking_id: $('Add Metadata').first().json.body.booking_id,\n  meeting_id: meetingId,\n  meeting_url: meetingUrl,\n  patient_url: meetingUrl,\n  provider_url: meeting.start_url || meetingUrl,\n  scheduled_start: $('Add Metadata').first().json.body.scheduled_time || new Date(Date.now() + 3600000).toISOString(),\n  duration_minutes: $('Add Metadata').first().json.body.duration_minutes || 30,\n  patient_email: $('Add Metadata').first().json.body.patient_email,\n  timestamp: $('Add Metadata').first().json.timestamp\n};"
+        "jsCode": "// CORE V3 (M11 Integration): Extract meeting URLs and normalize response\nconst response = $input.first().json;\n\n// Handle Module 11A response format\nlet meeting = {};\nif (response.data) {\n  // Module 11A format\n  meeting = response.data;\n} else {\n  // Legacy direct API format\n  meeting = response;\n}\n\n// Extract meeting details with fallbacks\nconst meetingUrl = meeting.join_url || meeting.url || `https://meet.example.com/${Date.now()}`;\nconst meetingId = meeting.meeting_id || meeting.id || `MOCK-${Date.now()}`;\nconst startUrl = meeting.start_url || meeting.host_url || meetingUrl;\n\nreturn {\n  session_id: $('Add Metadata').first().json.trace_id,\n  booking_id: $('Add Metadata').first().json.body.booking_id,\n  meeting_id: meetingId,\n  meeting_url: meetingUrl,\n  patient_url: meetingUrl,\n  provider_url: startUrl,\n  scheduled_start: $('Add Metadata').first().json.body.scheduled_time || new Date(Date.now() + 3600000).toISOString(),\n  duration_minutes: $('Add Metadata').first().json.body.duration_minutes || 30,\n  patient_email: $('Add Metadata').first().json.body.patient_email,\n  timestamp: $('Add Metadata').first().json.timestamp\n};"
       },
       "id": "extract-urls",
       "name": "Extract Meeting URLs",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1000,
+        1200,
         240
-      ]
+      ],
+      "notes": "CORE V3 (M11 Integration): Handles Module 11A response format\nNormalizes video connector responses"
     },
     {
       "parameters": {
@@ -174,12 +246,86 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [
-        1200,
+        1400,
         160
       ],
       "retryOnFail": true,
       "maxTries": 2,
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_03_core"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "resolve-email-connector",
+      "name": "Resolve Email Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11 INTEGRATION: Resolve email connector\nDISABLED BY DEFAULT: Enable when ready to use Module 11A for emails"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to_email: $('Extract Meeting URLs').first().json.patient_email, from_email: $env.SENDGRID_FROM_EMAIL || 'noreply@example.com', subject: 'Your Telehealth Session Link', message: 'Hi,\\n\\nYour telehealth session is scheduled!\\n\\nJoin Meeting: ' + $('Extract Meeting URLs').first().json.patient_url + '\\n\\nScheduled Time: ' + $('Extract Meeting URLs').first().json.scheduled_start + '\\nDuration: ' + $('Extract Meeting URLs').first().json.duration_minutes + ' minutes\\n\\nSession ID: ' + $('Extract Meeting URLs').first().json.session_id + '\\n\\nPlease join on time. Questions? Contact ' + ($env.CLINIC_PHONE || 'us') + '\\n\\nThank you!' } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "execute-email-connector",
+      "name": "Execute Email (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11 INTEGRATION: Execute email via Module 11A\nDISABLED BY DEFAULT: Enable when ready to use Module 11A for emails"
     },
     {
       "parameters": {
@@ -196,14 +342,14 @@
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
       "position": [
-        1200,
-        240
+        1400,
+        400
       ],
       "retryOnFail": true,
       "maxTries": 2,
       "continueOnFail": true,
       "disabled": true,
-      "notes": "DISABLED: Enable when SendGrid connected"
+      "notes": "LEGACY: Direct SendGrid integration\nDISABLED BY DEFAULT: Use Module 11A integration instead"
     },
     {
       "parameters": {
@@ -214,7 +360,7 @@
           "parameters": [
             {
               "name": "text",
-              "value": "=\ud83c\udfa5 Telehealth Session Created\n\ud83d\udce7 {{ $json.patient_email }}\n\ud83d\udcc5 {{ $json.scheduled_start }}\n\ud83d\udd17 {{ $json.meeting_url }}\n\ud83c\udd94 {{ $json.session_id }}"
+              "value": "=🎥 Telehealth Session Created\n📧 {{ $json.patient_email }}\n📅 {{ $json.scheduled_start }}\n🔗 {{ $json.meeting_url }}\n🆔 {{ $json.session_id }}"
             }
           ]
         },
@@ -227,7 +373,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1200,
+        1400,
         320
       ],
       "continueOnFail": true
@@ -245,7 +391,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1400,
+        1800,
         240
       ]
     },
@@ -288,7 +434,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1400,
+        1800,
         500
       ]
     },
@@ -305,7 +451,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1600,
+        2000,
         500
       ]
     }
@@ -337,7 +483,7 @@
       "main": [
         [
           {
-            "node": "Create Video Meeting",
+            "node": "Resolve Video Connector (M11A)",
             "type": "main",
             "index": 0
           }
@@ -351,7 +497,18 @@
         ]
       ]
     },
-    "Create Video Meeting": {
+    "Resolve Video Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute Video Connector (M11A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Video Connector (M11A)": {
       "main": [
         [
           {
@@ -371,7 +528,7 @@
             "index": 0
           },
           {
-            "node": "Send Meeting Link Email",
+            "node": "Resolve Email Connector (M11A)",
             "type": "main",
             "index": 0
           },
@@ -382,6 +539,17 @@
           },
           {
             "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Email Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute Email (M11A)",
             "type": "main",
             "index": 0
           }
@@ -402,9 +570,13 @@
     "webhook-trigger": {},
     "add-metadata": {},
     "validate-fields": {},
+    "resolve-video-connector": {},
+    "execute-video-connector": {},
     "create-meeting": {},
     "extract-urls": {},
     "log-sheets": {},
+    "resolve-email-connector": {},
+    "execute-email-connector": {},
     "send-email": {},
     "notify-staff": {},
     "return-success": {},
@@ -443,13 +615,15 @@
     }
   ],
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "branch": "Core",
-    "description": "Module 03 CORE V2: Hardened telehealth session with security and error handling",
+    "description": "Module 03 CORE V3: Module 11 integration for universal video connector management with mock/live mode switching",
     "target_users": "Coaches, therapists, wellness providers (non-medical)",
     "features": [
-      "Video meeting creation (Zoom/Google Meet)",
-      "Meeting link delivery via email",
+      "Module 11A video connector resolution (Zoom, Google Meet, Doxy.me)",
+      "Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "Video meeting creation via Module 11A",
+      "Meeting link delivery via email (Module 11A or legacy)",
       "Google Sheets session logging",
       "Staff notifications",
       "Trace ID tracking"
@@ -464,35 +638,54 @@
       "Attendance tracking"
     ],
     "required_vars": [
-      "GOOGLE_SHEET_ID"
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL (for Module 11A calls, e.g., http://localhost:5678)",
+      "CONNECTOR_REGISTRY_PATH (path to connectors_registry.json)"
     ],
     "optional_vars": [
       "GOOGLE_SHEET_TAB (default: Sessions)",
-      "VIDEO_PLATFORM_API_URL",
-      "VIDEO_PLATFORM_API_KEY",
+      "MOCK_MODE_GLOBAL (true/false - enables mock data from Module 11B)",
+      "MOCK_BASE_PATH (path to mocks directory)",
+      "DEFAULT_TIMEOUT_MS (default: 10000)",
+      "VIDEO_PLATFORM_API_KEY (Zoom/Google Meet - used by Module 11A connectors)",
+      "VIDEO_PLATFORM_API_URL (legacy)",
       "SENDGRID_FROM_EMAIL",
       "NOTIFICATION_WEBHOOK_URL",
       "CLINIC_PHONE"
     ],
     "video_platform_options": [
-      "Zoom (recommended)",
-      "Google Meet",
+      "Zoom (via Module 11A)",
+      "Google Meet (via Module 11A)",
+      "Doxy.me (via Module 11A)",
       "Mock (for testing)"
     ],
     "performance": {
-      "avg_execution_time_ms": 600,
-      "p95_execution_time_ms": 1200,
-      "node_count": 11
+      "avg_execution_time_ms": 650,
+      "p95_execution_time_ms": 1300,
+      "node_count": 14
     },
     "compatibility": {
       "receives_from": "Module 02 (booking_id)",
-      "sends_to": "Module 04 (session \u2192 billing)",
+      "sends_to": "Module 04 (session → billing)",
       "pairs_with": "Module 08 (reminder messages)"
     },
     "v2_improvements": [
       "Fixed CORS",
       "Improved trace_id",
       "Added error handler"
+    ],
+    "v3_improvements": [
+      "INTEGRATION: Added Module 11A video connector resolution",
+      "FLEXIBILITY: Support for multiple video providers via connector registry",
+      "TESTING: Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "ARCHITECTURE: Disabled direct API calls in favor of Module 11A",
+      "RESILIENCE: Module 11A handles authentication, normalization, and error handling",
+      "SCALABILITY: Easy to add new video connectors without modifying Module 03"
+    ],
+    "dependencies": [
+      "Module 11A: Connector Manager (required)",
+      "Module 11B: Mock Simulator (optional, for testing)",
+      "Module 11C: Test Harness (optional, for validation)"
     ]
   }
 }

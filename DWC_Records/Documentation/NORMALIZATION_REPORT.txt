@@ -1,0 +1,97 @@
+================================================================================
+DWC RECORDS - CATEGORY NORMALIZATION REPORT
+================================================================================
+
+APPLIED NORMALIZATIONS:
+
+1. Transaction Type (Tran Type):
+   'patient referrel' → 'Patient Referral'
+   'empolyee discount' → 'Employee Discount'
+   'transfer' → 'Transfer'
+
+2. Gender:
+   'person' → 'Other'
+   'female' → 'Female'
+   'male' → 'Male'
+
+3. Provider:
+   Removed duplicate text from provider names
+
+4. Procedure/Procedure Code:
+   Removed extra whitespace and standardized formatting
+
+================================================================================
+CHANGES BY FILE:
+================================================================================
+
+PatientResearchReportJan-1-2010-Jan-1-2015part_2.xlsx:
+  - Gender: 50000 changes
+  - Provider: 1 changes
+
+PatientResearchReportOcoeeJan-1-2000toOct-28-2025part_4.xlsx:
+  - Gender: 33608 changes
+  - Provider: 17 changes
+
+PatientResearchReportJan-1-2015-Jan-1-2020part_1.xlsx:
+  - Gender: 50000 changes
+
+PatientResearchReportOcoeeJan-1-2000toOct-28-2025part_2.xlsx:
+  - Gender: 50000 changes
+  - Provider: 56 changes
+
+PatientResearchReportJan-1-2010-Jan-1-2015part_3.xlsx:
+  - Gender: 18181 changes
+  - Provider: 17 changes
+  - Procedure: 2 changes
+
+PatientResearchReportJan-1-2000-Jan-1-2005.xlsx:
+  - Gender: 224 changes
+  - Provider: 1 changes
+
+PatientResearchReportJan-1-2015-Jan-1-2020part_3.xlsx:
+  - Gender: 50000 changes
+  - Provider: 18 changes
+
+PatientResearchReportJan-1-2010-Jan-1-2015part_1.xlsx:
+  - Gender: 50000 changes
+  - Provider: 61 changes
+
+PatientResearchReportOcoeeJan-1-2000toOct-28-2025part_1.xlsx:
+  - Gender: 50000 changes
+
+PatientResearchReportJan-1-2015-Jan-1-2020part_2.xlsx:
+  - Gender: 50000 changes
+  - Procedure: 6 changes
+
+PatientResearchReportJan-1-2015-Jan-1-2020part_4.xlsx:
+  - Gender: 50000 changes
+  - Provider: 4 changes
+
+PatientResearchReportJan-1-2015-Jan-1-2020part_5.xlsx:
+  - Gender: 10522 changes
+
+PatientResearchReportOcoeeJan-1-2000toOct-28-2025part_3.xlsx:
+  - Gender: 50000 changes
+  - Provider: 29 changes
+
+PatientResearchReportJan-1-2005-Jan-1-2010.xlsx:
+  - Gender: 3063 changes
+  - Provider: 8 changes
+
+PaymentDistributionReportJan-1-2000-Oct-28-2025.xlsx:
+  - Tran Type: 1716 changes
+  - Procedure Code: 8 changes
+
+PaymentDistributionReportJan-1-2010-Jan-1-2015.xlsx:
+  - Tran Type: 434 changes
+
+PaymentDistributionReportJan-1-2015-Jan-1-2020part_2.xlsx:
+  - Tran Type: 340 changes
+
+PaymentDistributionReportJan-1-2015-Jan-1-2020part_1.xlsx:
+  - Tran Type: 3536 changes
+  - Procedure Code: 2 changes
+
+================================================================================
+TOTAL CHANGES: 521854
+================================================================================

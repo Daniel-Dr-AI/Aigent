@@ -1,0 +1,11 @@
+{
+  "spreadsheetId": "mock_spreadsheet_id",
+  "tableRange": "Sheet1!A1:Z1000",
+  "updates": {
+    "spreadsheetId": "mock_spreadsheet_id",
+    "updatedRange": "Sheet1!A1001",
+    "updatedRows": 1,
+    "updatedColumns": 10,
+    "updatedCells": 10
+  }
+}

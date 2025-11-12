@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.item.json.body || {};\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\nreturn {body: body, trace_id: `PAY-${timestamp}-${random}`, timestamp: new Date().toISOString()};"
+        "jsCode": "// CORE V2: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\nreturn {body: body, trace_id: `PAY-${timestamp}-${random}`, timestamp: new Date().toISOString()};"
       },
       "id": "add-metadata",
       "name": "Add Metadata",
@@ -78,6 +78,70 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_04_core"
+            },
+            {
+              "name": "service_type",
+              "value": "payment"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-payment-connector",
+      "name": "Resolve Payment Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'stripe' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "create_charge"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { amount: $('Add Metadata').first().json.body.amount, currency: $('Add Metadata').first().json.body.currency || 'usd', customer_email: $('Add Metadata').first().json.body.customer_email, description: $('Add Metadata').first().json.body.description, metadata: { trace_id: $('Add Metadata').first().json.trace_id, booking_id: $('Add Metadata').first().json.body.booking_id || null } } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-payment-connector",
+      "name": "Execute Payment Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
         "resource": "charge",
         "amount": "={{ $json.body.amount }}",
         "currency": "={{$json.body.currency || 'usd'}}",
@@ -93,11 +157,25 @@
       "typeVersion": 1,
       "position": [
         800,
-        240
+        480
       ],
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "CORE: Stripe only (no Square)\nREQUIRES: Stripe credential configured"
+      "notes": "DISABLED: Replaced by Module 11A payment connector integration\nCORE: Stripe only (no Square)\nREQUIRES: Stripe credential configured",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Module 11A response format\nconst response = $input.first().json;\nlet charge = {};\n\nif (response.data) {\n  // Module 11A format\n  charge = response.data;\n} else {\n  // Legacy format\n  charge = response;\n}\n\nreturn {\n  id: charge.id || charge.charge_id || `MOCK-${Date.now()}`,\n  amount: charge.amount || 0,\n  currency: charge.currency || 'usd',\n  status: charge.status || 'succeeded',\n  receipt_url: charge.receipt_url || charge.receiptUrl || 'N/A',\n  failure_code: charge.failure_code,\n  failure_message: charge.failure_message\n};"
+      },
+      "id": "normalize-payment-response",
+      "name": "Normalize Payment Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        240
+      ]
     },
     {
       "parameters": {
@@ -115,7 +193,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1000,
+        1400,
         240
       ]
     },
@@ -161,6 +239,72 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_04_core"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-email-connector",
+      "name": "Resolve Email Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        240
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Add Metadata').first().json.body.customer_email, subject: 'Payment Receipt', body: `Thank you for your payment!\\n\\nAmount: $${($('Normalize Payment Response').first().json.amount / 100).toFixed(2)}\\nDescription: ${$('Add Metadata').first().json.body.description}\\nTransaction ID: ${$('Normalize Payment Response').first().json.id}\\n\\nReceipt: ${$('Normalize Payment Response').first().json.receipt_url}\\n\\nQuestions? Contact ${$env.CLINIC_PHONE}` } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-email",
+      "name": "Execute Email (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1800,
+        240
+      ],
+      "disabled": true
+    },
+    {
+      "parameters": {
         "operation": "send",
         "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Add Metadata').first().json.body.customer_email }}",
@@ -174,13 +318,14 @@
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
       "position": [
-        1200,
-        240
+        1600,
+        480
       ],
       "retryOnFail": true,
       "maxTries": 2,
       "continueOnFail": true,
-      "disabled": true
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A messaging connector (also disabled by default)"
     },
     {
       "parameters": {
@@ -331,7 +476,7 @@
       "main": [
         [
           {
-            "node": "Create Stripe Charge",
+            "node": "Resolve Payment Connector (M11A)",
             "type": "main",
             "index": 0
           }
@@ -345,7 +490,29 @@
         ]
       ]
     },
-    "Create Stripe Charge": {
+    "Resolve Payment Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute Payment Connector (M11A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Payment Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Payment Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Payment Response": {
       "main": [
         [
           {
@@ -356,6 +523,7 @@
         ]
       ]
     },
+    "Create Stripe Charge": {},
     "Check Payment Status": {
       "main": [
         [
@@ -441,7 +609,7 @@
     }
   ],
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "branch": "Core",
     "description": "Aigent Module 04 CORE: Simplified billing & payments via Stripe only.",
     "features": [
@@ -458,20 +626,39 @@
       "Refund automation"
     ],
     "required_vars": [
-      "GOOGLE_SHEET_ID"
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL",
+      "MOCK_MODE_GLOBAL"
+    ],
+    "optional_vars": [
+      "STRIPE_API_KEY",
+      "SENDGRID_API_KEY",
+      "DEFAULT_TIMEOUT_MS"
     ],
     "required_credentials": [
       "Stripe API"
     ],
     "performance": {
       "avg_execution_time_ms": 1200,
-      "node_count": 12
+      "node_count": 16
     },
     "v2_improvements": [
       "Fixed CORS",
       "Improved trace_id",
       "Added error handler",
       "Added amount validation (max $10,000)"
+    ],
+    "v3_improvements": [
+      "Integrated Module 11A payment connector (Stripe)",
+      "Added Module 11A messaging connector (disabled by default)",
+      "Response normalization for M11A format",
+      "Mock/live mode switching support",
+      "Disabled legacy Stripe node (backward compatibility)"
+    ],
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "Module 11C (Test Harness)"
     ]
   }
 }

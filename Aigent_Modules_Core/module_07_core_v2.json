@@ -232,8 +232,14 @@
   },
   "active": false,
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "description": "Module 07 CORE: Analytics aggregation",
+    "required_vars": [
+      "GOOGLE_SHEET_ID"
+    ],
+    "optional_vars": [
+      "NOTIFICATION_WEBHOOK_URL"
+    ],
     "performance": {
       "avg_execution_time_ms": 5000,
       "node_count": 7
@@ -242,6 +248,11 @@
       "CRITICAL: Added missing settings and tags keys",
       "Fixed CORS",
       "Improved trace_id"
+    ],
+    "v3_improvements": [
+      "Version bump to v1.2.0 for consistency",
+      "Module 07 uses Google Sheets API directly (no M11 integration needed)",
+      "Storage operations are already optimized"
     ]
   },
   "settings": {
