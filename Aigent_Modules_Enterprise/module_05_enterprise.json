@@ -69,7 +69,7 @@
               },
               {
                 "name": "X-Workflow-Version",
-                "value": "enterprise-1.0.0"
+                "value": "enterprise-1.1.0"
               }
             ]
           }
@@ -84,7 +84,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Rich execution metadata\nconst executionStartTime = Date.now();\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst clientIP = headers['x-forwarded-for']?.split(',')[0].trim() || \n                 headers['x-real-ip'] || 'unknown';\n\nconst traceId = `CAMPAIGN-${executionStartTime}-${Math.random().toString(36).substring(7)}`;\n\nlet body = input.body || {};\nif (Object.keys(body).length === 0 && input.campaign_type) {\n  body = {\n    campaign_type: input.campaign_type,\n    recipients: input.recipients,\n    channel: input.channel,\n    subject: input.subject,\n    message: input.message,\n    schedule_at: input.schedule_at\n  };\n}\n\nreturn {\n  body: body,\n  _metadata: {\n    trace_id: traceId,\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    workflow_version: 'enterprise-1.0.0',\n    module: 'followup_retention',\n    timestamp: new Date().toISOString()\n  }\n};"
+        "jsCode": "// ENTERPRISE: Rich execution metadata\nconst executionStartTime = Date.now();\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst clientIP = headers['x-forwarded-for']?.split(',')[0].trim() || \n                 headers['x-real-ip'] || 'unknown';\n\nconst traceId = `CAMPAIGN-${executionStartTime}-${Math.random().toString(36).substring(7)}`;\n\nlet body = input.body || {};\nif (Object.keys(body).length === 0 && input.campaign_type) {\n  body = {\n    campaign_type: input.campaign_type,\n    recipients: input.recipients,\n    channel: input.channel,\n    subject: input.subject,\n    message: input.message,\n    schedule_at: input.schedule_at\n  };\n}\n\nreturn {\n  body: body,\n  _metadata: {\n    trace_id: traceId,\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    workflow_version: 'enterprise-1.1.0',\n    module: 'followup_retention',\n    timestamp: new Date().toISOString()\n  }\n};"
       },
       "id": "add-metadata",
       "name": "Add Execution Metadata",
@@ -178,7 +178,7 @@
             "entries": [
               {
                 "name": "X-Workflow-Version",
-                "value": "enterprise-1.0.0"
+                "value": "enterprise-1.1.0"
               }
             ]
           }
@@ -309,6 +309,50 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "module_id", "value": "module_05_enterprise"},
+            {"name": "service_type", "value": "messaging"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"}
+      },
+      "id": "resolve-messaging-connector-email",
+      "name": "Resolve Messaging Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 140],
+      "notes": "M11A: Resolve SendGrid messaging connector for email"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "connector_id", "value": "={{ $json.primary_connector?.id || 'sendgrid_default' }}"},
+            {"name": "endpoint", "value": "send_email"},
+            {"name": "payload", "value": "={{ { from_email: $env.SENDGRID_FROM_EMAIL || 'noreply@example.com', to_email: $('Normalize & Mask Data').first().json.data.recipients[$itemIndex], subject: $('Normalize & Mask Data').first().json.data.subject, message: $('Normalize & Mask Data').first().json.data.message.replace('{name}', $('Normalize & Mask Data').first().json.data.recipients[$itemIndex].split('@')[0]) } }}"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"}
+      },
+      "id": "execute-messaging-email",
+      "name": "Execute Messaging Email (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 140],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "continueOnFail": true,
+      "notes": "M11A: Send campaign email via SendGrid with retry"
+    },
+    {
+      "parameters": {
         "operation": "send",
         "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
         "toEmail": "={{ $('Normalize & Mask Data').first().json.data.recipients[$itemIndex] }}",
@@ -318,14 +362,59 @@
         "options": {}
       },
       "id": "send-email",
-      "name": "Send Email (SendGrid)",
+      "name": "Send Email (SendGrid) (Legacy - DISABLED)",
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
-      "position": [2000, 140],
+      "position": [2000, 400],
+      "disabled": true,
       "retryOnFail": true,
       "maxTries": 3,
       "continueOnFail": true,
-      "notes": "ENTERPRISE: Email delivery with retry\nRETRY: 3 attempts with backoff\nNON-BLOCKING: Continues to next recipient if fails\nDATA: Uses full unmasked data for delivery"
+      "notes": "LEGACY: Replaced by M11A messaging connector - kept for rollback"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "module_id", "value": "module_05_enterprise"},
+            {"name": "service_type", "value": "messaging"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"}
+      },
+      "id": "resolve-messaging-connector-sms",
+      "name": "Resolve Messaging Connector SMS (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 260],
+      "notes": "M11A: Resolve Twilio messaging connector for SMS"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "connector_id", "value": "={{ $json.primary_connector?.id || 'twilio_default' }}"},
+            {"name": "endpoint", "value": "send_sms"},
+            {"name": "payload", "value": "={{ { from_phone: $env.TWILIO_FROM_PHONE, to_phone: $('Normalize & Mask Data').first().json.data.recipients[$itemIndex], message: $('Normalize & Mask Data').first().json.data.message } }}"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"}
+      },
+      "id": "execute-messaging-sms",
+      "name": "Execute Messaging SMS (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, 260],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "continueOnFail": true,
+      "notes": "M11A: Send campaign SMS via Twilio with retry"
     },
     {
       "parameters": {
@@ -336,14 +425,15 @@
         "options": {}
       },
       "id": "send-sms",
-      "name": "Send SMS (Twilio)",
+      "name": "Send SMS (Twilio) (Legacy - DISABLED)",
       "type": "n8n-nodes-base.twilio",
       "typeVersion": 1,
-      "position": [2000, 260],
+      "position": [2000, 420],
+      "disabled": true,
       "retryOnFail": true,
       "maxTries": 3,
       "continueOnFail": true,
-      "notes": "ENTERPRISE: SMS delivery with retry\nRETRY: 3 attempts with backoff\nNON-BLOCKING: Continues to next recipient if fails\nCHANNEL: For SMS channel only"
+      "notes": "LEGACY: Replaced by M11A messaging connector - kept for rollback"
     },
     {
       "parameters": {
@@ -387,7 +477,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Campaign summary aggregation\nconst metadata = $('Normalize & Mask Data').first().json._metadata;\nconst data = $('Normalize & Mask Data').first().json.data;\nconst dataMasked = $('Normalize & Mask Data').first().json.data_masked;\n\n// Aggregate results from all recipients\nconst allResults = $input.all();\nconst sentCount = allResults.filter(r => r.json.success !== false).length;\nconst failedCount = allResults.length - sentCount;\n\nconst executionDuration = Date.now() - metadata.execution_start_time;\n\nlet performanceCategory = 'fast';\nif (executionDuration >= 5000) performanceCategory = 'slow';\nelse if (executionDuration >= 2000) performanceCategory = 'normal';\n\nreturn {\n  success: true,\n  message: 'Campaign executed successfully',\n  data: {\n    campaign_id: metadata.trace_id,\n    campaign_type: data.campaign_type,\n    channel: data.channel,\n    recipients_total: data.recipients_count,\n    recipients_sent: sentCount,\n    recipients_failed: failedCount,\n    success_rate: ((sentCount / data.recipients_count) * 100).toFixed(2) + '%',\n    priority_score: data.priority_score,\n    trace_id: metadata.trace_id\n  },\n  metadata: {\n    execution_time_ms: executionDuration,\n    performance: performanceCategory,\n    workflow_version: 'enterprise-1.0.0',\n    timestamp: metadata.timestamp\n  }\n};"
+        "jsCode": "// ENTERPRISE: Campaign summary aggregation\nconst metadata = $('Normalize & Mask Data').first().json._metadata;\nconst data = $('Normalize & Mask Data').first().json.data;\nconst dataMasked = $('Normalize & Mask Data').first().json.data_masked;\n\n// Aggregate results from all recipients\nconst allResults = $input.all();\nconst sentCount = allResults.filter(r => r.json.success !== false).length;\nconst failedCount = allResults.length - sentCount;\n\nconst executionDuration = Date.now() - metadata.execution_start_time;\n\nlet performanceCategory = 'fast';\nif (executionDuration >= 5000) performanceCategory = 'slow';\nelse if (executionDuration >= 2000) performanceCategory = 'normal';\n\nreturn {\n  success: true,\n  message: 'Campaign executed successfully',\n  data: {\n    campaign_id: metadata.trace_id,\n    campaign_type: data.campaign_type,\n    channel: data.channel,\n    recipients_total: data.recipients_count,\n    recipients_sent: sentCount,\n    recipients_failed: failedCount,\n    success_rate: ((sentCount / data.recipients_count) * 100).toFixed(2) + '%',\n    priority_score: data.priority_score,\n    trace_id: metadata.trace_id\n  },\n  metadata: {\n    execution_time_ms: executionDuration,\n    performance: performanceCategory,\n    workflow_version: 'enterprise-1.1.0',\n    timestamp: metadata.timestamp\n  }\n};"
       },
       "id": "format-success",
       "name": "Format Success Response",
@@ -395,6 +485,50 @@
       "typeVersion": 2,
       "position": [2400, 200],
       "notes": "ENTERPRISE: Rich success response\nMETRICS: Execution time, success rate, performance\nAGGREGATION: Summarizes all recipient results"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "module_id", "value": "module_05_enterprise"},
+            {"name": "service_type", "value": "notification"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"}
+      },
+      "id": "resolve-notification-connector",
+      "name": "Resolve Notification Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2600, 140],
+      "notes": "M11A: Resolve Slack notification connector"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "connector_id", "value": "={{ $json.primary_connector?.id || 'slack_default' }}"},
+            {"name": "endpoint", "value": "send_notification"},
+            {"name": "payload", "value": "={{ { text: '📧 Campaign Completed\\n🏷️ Type: ' + $('Format Success Response').first().json.data.campaign_type + '\\n📊 Recipients: ' + $('Format Success Response').first().json.data.recipients_sent + '/' + $('Format Success Response').first().json.data.recipients_total + '\\n✅ Success Rate: ' + $('Format Success Response').first().json.data.success_rate + '\\n⭐ Priority: ' + $('Format Success Response').first().json.data.priority_score + '/10\\n🆔 ID: ' + $('Format Success Response').first().json.data.trace_id, priority: ($('Format Success Response').first().json.data.priority_score >= 8 ? 'high' : 'normal') } }}"}
+          ]
+        },
+        "options": {"timeout": "={{$env.DEFAULT_TIMEOUT_MS || 5000}}"}
+      },
+      "id": "execute-notification",
+      "name": "Execute Notification (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2800, 140],
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11A: Send campaign completion notification (PHI-safe, aggregated metrics)"
     },
     {
       "parameters": {
@@ -418,14 +552,15 @@
         }
       },
       "id": "send-notification",
-      "name": "Send Staff Notification",
+      "name": "Send Staff Notification (Legacy - DISABLED)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2600, 140],
+      "position": [2600, 440],
+      "disabled": true,
       "continueOnFail": true,
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "ENTERPRISE: Notification (no PHI)\nSECURITY: Uses aggregated metrics only\nOPTIONAL: Set NOTIFICATION_WEBHOOK_URL"
+      "notes": "LEGACY: Replaced by M11A notification connector - kept for rollback"
     },
     {
       "parameters": {
@@ -486,7 +621,7 @@
             "entries": [
               {
                 "name": "X-Workflow-Version",
-                "value": "enterprise-1.0.0"
+                "value": "enterprise-1.1.0"
               },
               {
                 "name": "X-Execution-Time-Ms",
@@ -547,14 +682,20 @@
     },
     "Route: Email Channel": {
       "main": [
-        [{"node": "Send Email (SendGrid)"}],
-        [{"node": "Send SMS (Twilio)"}]
+        [{"node": "Resolve Messaging Connector (M11A)"}],
+        [{"node": "Resolve Messaging Connector SMS (M11A)"}]
       ]
     },
-    "Send Email (SendGrid)": {
+    "Resolve Messaging Connector (M11A)": {
+      "main": [[{"node": "Execute Messaging Email (M11A)"}]]
+    },
+    "Execute Messaging Email (M11A)": {
       "main": [[{"node": "Log Campaign Activity"}]]
     },
-    "Send SMS (Twilio)": {
+    "Resolve Messaging Connector SMS (M11A)": {
+      "main": [[{"node": "Execute Messaging SMS (M11A)"}]]
+    },
+    "Execute Messaging SMS (M11A)": {
       "main": [[{"node": "Log Campaign Activity"}]]
     },
     "Log Campaign Activity": {
@@ -562,10 +703,13 @@
     },
     "Format Success Response": {
       "main": [[
-        {"node": "Send Staff Notification"},
+        {"node": "Resolve Notification Connector (M11A)"},
         {"node": "Send Observability Event"},
         {"node": "Return Success"}
       ]]
+    },
+    "Resolve Notification Connector (M11A)": {
+      "main": [[{"node": "Execute Notification (M11A)"}]]
     }
   },
   "active": false,
@@ -593,9 +737,9 @@
     }
   ],
   "meta": {
-    "version": "enterprise-1.0.0",
+    "version": "enterprise-1.1.0",
     "branch": "Enterprise",
-    "description": "Aigent Module 05 ENTERPRISE: Secure followup & retention campaigns with HIPAA compliance, authentication, PHI masking, rate limiting, and advanced observability.",
+    "description": "Aigent Module 05 ENTERPRISE: Secure followup & retention campaigns with HIPAA compliance, authentication, PHI masking, rate limiting, advanced observability, and M11A connector integration.",
     "author": "Aigent Systems",
     "validated_by": "Serena + Context7",
     "module_class": "enterprise",
@@ -617,7 +761,10 @@
       "Module 09 compliance integration",
       "Response headers for debugging",
       "Google Sheets logging",
-      "Parallel execution for speed"
+      "Parallel execution for speed",
+      "Module 11A messaging connector integration (email + SMS)",
+      "Module 11A notification connector integration",
+      "Mock/live mode switching via MOCK_MODE_GLOBAL"
     ],
     "security_features": [
       "Optional API key authentication",
@@ -715,6 +862,68 @@
       "core_features": "Basic campaign, simple validation, SendGrid only",
       "enterprise_features": "+Auth, +PHI masking, +Priority scoring, +Rate limiting, +Multi-channel, +Module 09 audit, +Observability, +Success tracking"
     },
-    "notes": "ENTERPRISE GRADE: Essential security (auth, PHI masking, rate limiting), multi-channel support, Module 09 compliance integration, observability, and comprehensive tracking. Uses native n8n nodes where possible. Optional features disabled by default for easy testing."
+    "v1.1.0_improvements": {
+      "m11a_integration": {
+        "messaging_connector_email": "SendGrid email now routed through M11A connector manager",
+        "messaging_connector_sms": "Twilio SMS now routed through M11A connector manager",
+        "notification_connector": "Slack notifications now via M11A (PHI-safe aggregated metrics)",
+        "mock_mode_support": "Set MOCK_MODE_GLOBAL=true for testing without live APIs",
+        "backward_compatibility": "Legacy nodes disabled but preserved for rollback"
+      },
+      "nodes_added": [
+        "Resolve Messaging Connector (M11A) (email)",
+        "Execute Messaging Email (M11A)",
+        "Resolve Messaging Connector SMS (M11A)",
+        "Execute Messaging SMS (M11A)",
+        "Resolve Notification Connector (M11A)",
+        "Execute Notification (M11A)"
+      ],
+      "nodes_disabled": [
+        "Send Email (SendGrid) (Legacy - DISABLED)",
+        "Send SMS (Twilio) (Legacy - DISABLED)",
+        "Send Staff Notification (Legacy - DISABLED)"
+      ],
+      "enterprise_features_preserved": [
+        "API key authentication flow",
+        "Execution metadata tracking",
+        "PHI masking logic (email, phone)",
+        "Campaign priority scoring (1-10)",
+        "Rate limiting (optional)",
+        "XSS sanitization",
+        "Multi-channel routing",
+        "Batch processing with retry",
+        "Success rate aggregation",
+        "Module 09 compliance logging",
+        "Google Sheets audit logging",
+        "Observability integration"
+      ]
+    },
+    "m11a_integration": {
+      "status": "fully_integrated",
+      "version": "enterprise-1.1.0",
+      "integration_date": "2025-11-12",
+      "connectors_used": [
+        {"type": "messaging", "service": "SendGrid", "channel": "email", "status": "enabled"},
+        {"type": "messaging", "service": "Twilio", "channel": "sms", "status": "enabled"},
+        {"type": "notification", "service": "Slack", "status": "enabled"}
+      ],
+      "dependencies": [
+        "module_11a_connector_manager.json",
+        "module_11b_mock_simulator.json",
+        "connectors_registry.json"
+      ],
+      "mock_mode": {
+        "enabled": "Set MOCK_MODE_GLOBAL=true",
+        "mock_email_id": "msg_mock_12345",
+        "mock_sms_sid": "SM_mock_67890",
+        "mock_notification_ts": "1234567890.123456"
+      },
+      "testing": {
+        "test_campaign": "curl -X POST $N8N_BASE_URL/webhook/followup-campaign -H 'Content-Type: application/json' -d '{\"campaign_type\": \"followup\", \"recipients\": [\"test@example.com\"], \"channel\": \"email\", \"subject\": \"Test\", \"message\": \"Test message content\"}'",
+        "mock_mode_test": "MOCK_MODE_GLOBAL=true <same curl command>",
+        "expected_response": "{\"success\": true, \"data\": {\"recipients_sent\": 1, \"success_rate\": \"100.00%\"}}"
+      }
+    },
+    "notes": "ENTERPRISE GRADE: Essential security (auth, PHI masking, rate limiting), multi-channel support, Module 09 compliance integration, observability, and comprehensive tracking. M11A integration adds flexibility and mock mode support while preserving all Enterprise security features. Uses native n8n nodes where possible. Optional features disabled by default for easy testing."
   }
 }

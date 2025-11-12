@@ -325,7 +325,7 @@
     }
   ],
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "branch": "Core",
     "description": "Module 10 CORE: System orchestration for multi-module workflows",
     "features": [
@@ -357,6 +357,11 @@
       "Added continueOnFail to module calls for partial success",
       "Added error aggregation (reports which modules succeeded/failed)",
       "Added global error handler"
+    ],
+    "v3_improvements": [
+      "Version bump to v1.2.0 for consistency",
+      "Module 10 orchestrates other modules via webhooks (no M11 integration needed)",
+      "All called modules (M01-M03) now support Module 11 integration"
     ]
   }
 }

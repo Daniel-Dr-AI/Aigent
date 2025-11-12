@@ -73,6 +73,70 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_06_core"
+            },
+            {
+              "name": "service_type",
+              "value": "ocr"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-ocr-connector",
+      "name": "Resolve OCR Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'google_cloud_vision' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "detect_text"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { image_data: $('Download File').first().json.data, document_type: $('Add Metadata').first().json.body.document_type || 'generic' } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-ocr-connector",
+      "name": "Execute OCR (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        240
+      ]
+    },
+    {
+      "parameters": {
         "operation": "imageText",
         "binaryPropertyName": "data",
         "options": {}
@@ -83,20 +147,21 @@
       "typeVersion": 1,
       "position": [
         1000,
-        240
+        480
       ],
-      "notes": "REQUIRES: Google Cloud Vision credential"
+      "notes": "DISABLED: Replaced by Module 11A OCR connector integration\nREQUIRES: Google Cloud Vision credential",
+      "disabled": true
     },
     {
       "parameters": {
-        "jsCode": "const ocr = $input.first().json;\nconst text = ocr.fullTextAnnotation?.text || '';\n// Simple field extraction\nconst nameMatch = text.match(/name[:\\s]+([a-zA-Z\\s]+)/i);\nconst dateMatch = text.match(/(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})/);\nconst amountMatch = text.match(/\\$([\\d,]+\\.?\\d*)/);\nreturn {\n  document_id: $('Add Metadata').first().json.trace_id,\n  file_url: $('Add Metadata').first().json.body.file_url,\n  ocr_text: text,\n  extracted: {name: nameMatch?.[1]?.trim(), date: dateMatch?.[0], amount: amountMatch?.[0]},\n  timestamp: $('Add Metadata').first().json.timestamp\n};"
+        "jsCode": "// Normalize Module 11A response format\nconst response = $input.first().json;\nlet ocr = {};\n\nif (response.data) {\n  // Module 11A format\n  ocr = response.data;\n} else {\n  // Legacy format\n  ocr = response;\n}\n\nconst text = ocr.fullTextAnnotation?.text || ocr.text || ocr.extracted_text || '';\n// Simple field extraction\nconst nameMatch = text.match(/name[:\\s]+([a-zA-Z\\s]+)/i);\nconst dateMatch = text.match(/(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})/);\nconst amountMatch = text.match(/\\$([\\d,]+\\.?\\d*)/);\nreturn {\n  document_id: $('Add Metadata').first().json.trace_id,\n  file_url: $('Add Metadata').first().json.body.file_url,\n  ocr_text: text,\n  extracted: {name: nameMatch?.[1]?.trim(), date: dateMatch?.[0], amount: amountMatch?.[0]},\n  timestamp: $('Add Metadata').first().json.timestamp\n};"
       },
       "id": "extract",
       "name": "Extract Fields",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1200,
+        1400,
         240
       ]
     },
@@ -238,12 +303,21 @@
       "main": [
         [
           {
-            "node": "Google Vision OCR"
+            "node": "Resolve OCR Connector (M11A)"
           }
         ]
       ]
     },
-    "Google Vision OCR": {
+    "Resolve OCR Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute OCR (M11A)"
+          }
+        ]
+      ]
+    },
+    "Execute OCR (M11A)": {
       "main": [
         [
           {
@@ -252,6 +326,7 @@
         ]
       ]
     },
+    "Google Vision OCR": {},
     "Extract Fields": {
       "main": [
         [
@@ -284,17 +359,37 @@
   },
   "active": false,
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "description": "Module 06 CORE: Document OCR",
+    "required_vars": [
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL",
+      "MOCK_MODE_GLOBAL"
+    ],
+    "optional_vars": [
+      "GOOGLE_CLOUD_VISION_API_KEY",
+      "DEFAULT_TIMEOUT_MS"
+    ],
     "performance": {
       "avg_execution_time_ms": 3000,
-      "node_count": 8
+      "node_count": 11
     },
     "v2_improvements": [
       "CRITICAL: Added missing settings and tags keys",
       "Fixed CORS",
       "Improved trace_id",
       "Added error handler"
+    ],
+    "v3_improvements": [
+      "Integrated Module 11A OCR connector (Google Cloud Vision)",
+      "Response normalization for M11A format",
+      "Mock/live mode switching support",
+      "Disabled legacy Google Vision node (backward compatibility)"
+    ],
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "Module 11C (Test Harness)"
     ]
   },
   "settings": {

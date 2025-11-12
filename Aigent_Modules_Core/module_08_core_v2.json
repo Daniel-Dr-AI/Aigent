@@ -77,10 +77,40 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_08_core"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-messaging-connector",
+      "name": "Resolve Messaging Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        240
+      ]
+    },
+    {
+      "parameters": {
         "conditions": {
           "string": [
             {
-              "value1": "={{ $json.body.channel }}",
+              "value1": "={{ $('Add Metadata').first().json.body.channel }}",
               "value2": "email"
             }
           ]
@@ -91,7 +121,75 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        800,
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $('Resolve Messaging Connector (M11A)').first().json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Add Metadata').first().json.body.recipient, subject: `Message from ${$env.CLINIC_NAME}`, body: $('Add Metadata').first().json.body.message } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-email",
+      "name": "Execute Email (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $('Resolve Messaging Connector (M11A)').first().json.primary_connector?.id || 'twilio' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_sms"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Add Metadata').first().json.body.recipient, body: $('Add Metadata').first().json.body.message } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-sms",
+      "name": "Execute SMS (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
         300
       ]
     },
@@ -110,10 +208,12 @@
       "typeVersion": 1.1,
       "position": [
         1000,
-        240
+        480
       ],
       "retryOnFail": true,
-      "maxTries": 2
+      "maxTries": 2,
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A messaging connector integration"
     },
     {
       "parameters": {
@@ -128,10 +228,12 @@
       "typeVersion": 1.2,
       "position": [
         1000,
-        360
+        600
       ],
       "retryOnFail": true,
-      "maxTries": 2
+      "maxTries": 2,
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A messaging connector integration"
     },
     {
       "parameters": {
@@ -225,7 +327,7 @@
       "main": [
         [
           {
-            "node": "Route by Channel"
+            "node": "Resolve Messaging Connector (M11A)"
           }
         ],
         [
@@ -235,21 +337,30 @@
         ]
       ]
     },
+    "Resolve Messaging Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Route by Channel"
+          }
+        ]
+      ]
+    },
     "Route by Channel": {
       "main": [
         [
           {
-            "node": "Send Email"
+            "node": "Execute Email (M11A)"
           }
         ],
         [
           {
-            "node": "Send SMS"
+            "node": "Execute SMS (M11A)"
           }
         ]
       ]
     },
-    "Send Email": {
+    "Execute Email (M11A)": {
       "main": [
         [
           {
@@ -258,7 +369,7 @@
         ]
       ]
     },
-    "Send SMS": {
+    "Execute SMS (M11A)": {
       "main": [
         [
           {
@@ -267,6 +378,8 @@
         ]
       ]
     },
+    "Send Email": {},
+    "Send SMS": {},
     "Log to Sheets": {
       "main": [
         [
@@ -279,17 +392,40 @@
   },
   "active": false,
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "description": "Module 08 CORE: Omnichannel messaging",
+    "required_vars": [
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL",
+      "MOCK_MODE_GLOBAL"
+    ],
+    "optional_vars": [
+      "SENDGRID_API_KEY",
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "DEFAULT_TIMEOUT_MS"
+    ],
     "performance": {
       "avg_execution_time_ms": 700,
-      "node_count": 9
+      "node_count": 13
     },
     "v2_improvements": [
       "CRITICAL: Added missing settings and tags keys",
       "Fixed CORS",
       "Improved trace_id",
       "Added channel validation (email|sms only)"
+    ],
+    "v3_improvements": [
+      "Integrated Module 11A messaging connector (SendGrid/Twilio)",
+      "Multi-channel support via M11A (email/sms)",
+      "Response normalization for M11A format",
+      "Mock/live mode switching support",
+      "Disabled legacy SendGrid/Twilio nodes (backward compatibility)"
+    ],
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "Module 11C (Test Harness)"
     ]
   },
   "settings": {

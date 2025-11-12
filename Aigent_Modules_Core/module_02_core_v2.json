@@ -95,6 +95,76 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_02_core"
+            },
+            {
+              "name": "service_type",
+              "value": "calendar"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "resolve-connector-m11a",
+      "name": "Resolve Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11 INTEGRATION: Resolve connector for module_02_core\nReturns connector info from Module 11A registry"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector.id }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "availability"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { date: $('Normalize Data').first().json.preferred_date || $now.plus({days: 1}).toFormat('yyyy-MM-dd'), duration: $env.DEFAULT_APPOINTMENT_DURATION || 30, timezone: $('Normalize Data').first().json.timezone } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "execute-connector-m11a",
+      "name": "Execute Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "M11 INTEGRATION: Execute availability check via Module 11A\nSupports both live and mock mode based on MOCK_MODE_GLOBAL"
+    },
+    {
+      "parameters": {
         "method": "GET",
         "url": "={{$env.SCHEDULING_API_URL || 'https://httpbin.org/get'}}",
         "sendQuery": true,
@@ -120,25 +190,26 @@
       "typeVersion": 4.2,
       "position": [
         1200,
-        240
+        400
       ],
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "CORE V2: SCHEDULING_API_URL is REQUIRED (no mock)\nSet to Cal.com, Calendly, or your scheduling API\nCircuit breaker: retries 2x with backoff"
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A integration\nOLD: Direct SCHEDULING_API_URL call\nNEW: Use 'Execute Connector (M11A)' instead"
     },
     {
       "parameters": {
-        "jsCode": "// CORE: Simple slot selection\nconst slots = $input.first().json.slots || [];\n\nif (slots.length === 0) {\n  // Return error object\n  return { error: true, message: 'No available slots' };\n}\n\n// Use first available slot\nconst selected = slots[0];\n\nreturn {\n  slot_time: selected.time || selected.start,\n  slot_id: selected.id || selected.time,\n  duration: selected.duration || 30\n};"
+        "jsCode": "// CORE V3 (M11 Integration): Simple slot selection\n// Handles both Module 11A response format and legacy direct API format\nconst response = $input.first().json;\n\n// Check if this is a Module 11A response (has data.slots or data.data)\nlet slots = [];\nif (response.data) {\n  // Module 11A format\n  slots = response.data.slots || response.data.data?.slots || response.data.available_times || [];\n} else {\n  // Legacy format\n  slots = response.slots || [];\n}\n\nif (slots.length === 0) {\n  // Return error object\n  return { error: true, message: 'No available slots' };\n}\n\n// Use first available slot\nconst selected = slots[0];\n\nreturn {\n  slot_time: selected.time || selected.start,\n  slot_id: selected.id || selected.time,\n  duration: selected.duration || 30\n};"
       },
       "id": "select-slot",
       "name": "Select Slot",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1400,
+        1600,
         240
       ],
-      "notes": "CORE: First available slot\nNO: Preference matching, optimization"
+      "notes": "CORE V3 (M11 Integration): First available slot\nHandles Module 11A response format (data.slots)\nNO: Preference matching, optimization"
     },
     {
       "parameters": {
@@ -156,7 +227,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1600,
+        1800,
         240
       ],
       "notes": "CORE: Simple error check"
@@ -211,12 +282,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1800,
+        2000,
         180
       ],
       "retryOnFail": true,
       "maxTries": 2,
-      "notes": "CORE: Direct booking creation\nNO: Duplicate prevention, saga pattern"
+      "notes": "CORE: Direct booking creation\nNO: Duplicate prevention, saga pattern\nTODO: Future - Replace with Module 11A execute call for 'bookings' endpoint"
     },
     {
       "parameters": {
@@ -253,7 +324,7 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.4,
       "position": [
-        2000,
+        2200,
         100
       ],
       "retryOnFail": true,
@@ -283,7 +354,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2000,
+        2200,
         180
       ],
       "continueOnFail": true,
@@ -304,7 +375,7 @@
       "type": "n8n-nodes-base.sendGrid",
       "typeVersion": 1.1,
       "position": [
-        2000,
+        2200,
         260
       ],
       "retryOnFail": true,
@@ -326,7 +397,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        2200,
+        2400,
         180
       ],
       "notes": "CORE: Simple success response\nNO: Performance metrics, detailed confirmations"
@@ -344,7 +415,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
       "position": [
-        1800,
+        2000,
         340
       ],
       "notes": "CORE: 409 Conflict (no slots)"
@@ -470,7 +541,29 @@
       "main": [
         [
           {
-            "node": "Check Availability",
+            "node": "Resolve Connector (M11A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute Connector (M11A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Select Slot",
             "type": "main",
             "index": 0
           }
@@ -603,16 +696,18 @@
     }
   ],
   "meta": {
-    "version": "core-1.1.0",
+    "version": "core-1.2.0",
     "branch": "Core",
-    "description": "Aigent Module 02 CORE V2: Hardened consult booking with validation, error handling, and security fixes.",
+    "description": "Aigent Module 02 CORE V3: Module 11 integration for universal connector management with mock/live mode switching.",
     "target_users": "Service providers (salons, gyms, coaching, wellness)",
     "features": [
       "Basic webhook entry (no auth)",
       "Simple 4-field validation",
-      "Calendar availability check (Cal.com or mock API)",
+      "Module 11A connector resolution (dynamic calendar API selection)",
+      "Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "Calendar availability check via Module 11A (Cal.com, Calendly, Google Calendar)",
       "First-available slot selection",
-      "Direct booking creation",
+      "Direct booking creation (to be migrated to Module 11A)",
       "Google Sheets logging",
       "Optional Slack notification",
       "Optional email confirmation",
@@ -633,11 +728,18 @@
       "Error correlation"
     ],
     "required_vars": [
-      "GOOGLE_SHEET_ID"
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL (for Module 11A calls, e.g., http://localhost:5678)",
+      "CONNECTOR_REGISTRY_PATH (path to connectors_registry.json)"
     ],
     "optional_vars": [
       "GOOGLE_SHEET_TAB (default: Bookings)",
-      "SCHEDULING_API_URL (Cal.com API or mock)",
+      "SCHEDULING_API_URL (Cal.com API URL - used by Module 11A connectors)",
+      "MOCK_MODE_GLOBAL (true/false - enables mock data from Module 11B)",
+      "MOCK_BASE_PATH (path to mocks directory)",
+      "DEFAULT_TIMEOUT_MS (default: 10000)",
+      "CALCOM_API_KEY (if using Cal.com in live mode)",
+      "CALENDLY_API_KEY (if using Calendly in live mode)",
       "NOTIFICATION_WEBHOOK_URL (Slack/Teams)",
       "SENDGRID_FROM_EMAIL (if email enabled)",
       "CLINIC_NAME",
@@ -658,15 +760,23 @@
       "Mock API (for testing - returns sample slots)"
     ],
     "setup_instructions": [
-      "1. Import to n8n",
-      "2. Connect Google Sheets credential",
-      "3. Set GOOGLE_SHEET_ID and optionally GOOGLE_SHEET_TAB",
-      "4. Configure SCHEDULING_API_URL (Cal.com or mock)",
-      "5. Optionally set NOTIFICATION_WEBHOOK_URL for Slack",
-      "6. Optionally enable & configure SendGrid",
-      "7. Set clinic details (NAME, PHONE, TIMEZONE)",
-      "8. Test with sample booking",
-      "9. Activate workflow"
+      "1. Import Module 11A, 11B, and 11C to n8n and activate them",
+      "2. Set N8N_BASE_URL (e.g., http://localhost:5678)",
+      "3. Set CONNECTOR_REGISTRY_PATH to connectors_registry.json location",
+      "4. Set MOCK_MODE_GLOBAL=true for testing with mock data",
+      "5. Set MOCK_BASE_PATH to mocks directory",
+      "6. Import Module 02 V3 to n8n",
+      "7. Connect Google Sheets credential",
+      "8. Set GOOGLE_SHEET_ID and optionally GOOGLE_SHEET_TAB",
+      "9. Configure SCHEDULING_API_URL (Cal.com API URL - used by connector registry)",
+      "10. For live mode: Set CALCOM_API_KEY or CALENDLY_API_KEY and set MOCK_MODE_GLOBAL=false",
+      "11. Optionally set NOTIFICATION_WEBHOOK_URL for Slack",
+      "12. Optionally enable & configure SendGrid",
+      "13. Set clinic details (NAME, PHONE, TIMEZONE)",
+      "14. Test with sample booking (mock mode first)",
+      "15. Verify mock data is returned from Module 11B",
+      "16. Switch to live mode and test with real API",
+      "17. Activate workflow"
     ],
     "test_curl": "curl -X POST https://your-n8n-instance/webhook/consult-booking -H 'Content-Type: application/json' -d '{\"name\":\"Jane Smith\",\"email\":\"jane@example.com\",\"phone\":\"555-9876\",\"service_type\":\"Consultation\",\"preferred_date\":\"2025-11-15\",\"preferred_time\":\"14:00\"}'",
     "performance": {
@@ -690,6 +800,20 @@
       "RELIABILITY: Improved trace_id uniqueness",
       "UX: Field-specific error messages",
       "DOCS: Clarified SCHEDULING_API_URL is required"
+    ],
+    "v3_improvements": [
+      "INTEGRATION: Added Module 11A connector resolution",
+      "FLEXIBILITY: Support for multiple calendar providers via connector registry",
+      "TESTING: Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "ARCHITECTURE: Disabled direct API calls in favor of Module 11A",
+      "RESILIENCE: Module 11A handles authentication, normalization, and error handling",
+      "SCALABILITY: Easy to add new connectors without modifying Module 02",
+      "DEBUGGING: Enhanced response parsing to handle Module 11A format"
+    ],
+    "dependencies": [
+      "Module 11A: Connector Manager (required)",
+      "Module 11B: Mock Simulator (optional, for testing)",
+      "Module 11C: Test Harness (optional, for validation)"
     ]
   }
 }

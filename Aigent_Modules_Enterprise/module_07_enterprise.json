@@ -71,7 +71,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Rich execution metadata\nconst executionStartTime = Date.now();\nconst input = $input.item.json;\nconst headers = input.headers || {};\nconst body = input.body || {};\n\nconst clientIP = headers['x-forwarded-for']?.split(',')[0].trim() || headers['x-real-ip'] || 'unknown';\nconst traceId = `REPORT-${executionStartTime}-${Math.random().toString(36).substring(7)}`;\n\n// Date range defaults\nconst periodStart = body.period_start || new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];\nconst periodEnd = body.period_end || new Date().toISOString().split('T')[0];\nconst reportType = body.report_type || 'summary';\n\nreturn {\n  body: {\n    period_start: periodStart,\n    period_end: periodEnd,\n    report_type: reportType,\n    include_trends: body.include_trends === true || body.include_trends === 'true',\n    export_format: body.export_format || 'json'\n  },\n  _metadata: {\n    trace_id: traceId,\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    workflow_version: 'enterprise-1.0.0',\n    module: 'analytics_reporting',\n    timestamp: new Date().toISOString()\n  }\n};"
+        "jsCode": "// ENTERPRISE: Rich execution metadata\nconst executionStartTime = Date.now();\nconst input = $input.item.json;\nconst headers = input.headers || {};\nconst body = input.body || {};\n\nconst clientIP = headers['x-forwarded-for']?.split(',')[0].trim() || headers['x-real-ip'] || 'unknown';\nconst traceId = `REPORT-${executionStartTime}-${Math.random().toString(36).substring(7)}`;\n\n// Date range defaults\nconst periodStart = body.period_start || new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];\nconst periodEnd = body.period_end || new Date().toISOString().split('T')[0];\nconst reportType = body.report_type || 'summary';\n\nreturn {\n  body: {\n    period_start: periodStart,\n    period_end: periodEnd,\n    report_type: reportType,\n    include_trends: body.include_trends === true || body.include_trends === 'true',\n    export_format: body.export_format || 'json'\n  },\n  _metadata: {\n    trace_id: traceId,\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    workflow_version: 'enterprise-1.1.0',\n    module: 'analytics_reporting',\n    timestamp: new Date().toISOString()\n  }\n};"
       },
       "id": "add-metadata",
       "name": "Add Execution Metadata",
@@ -204,7 +204,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// ENTERPRISE: Format success response\nconst metadata = $json._metadata;\nconst report = $json.report;\n\nconst executionDuration = Date.now() - metadata.execution_start_time;\n\nlet performanceCategory = 'fast';\nif (executionDuration >= 5000) performanceCategory = 'slow';\nelse if (executionDuration >= 2000) performanceCategory = 'normal';\n\nreturn {\n  success: true,\n  message: 'Report generated successfully',\n  data: report,\n  metadata: {\n    execution_time_ms: executionDuration,\n    performance: performanceCategory,\n    workflow_version: 'enterprise-1.0.0',\n    timestamp: metadata.timestamp,\n    data_sources: ['leads', 'bookings', 'payments', 'campaigns', 'documents']\n  }\n};"
+        "jsCode": "// ENTERPRISE: Format success response\nconst metadata = $json._metadata;\nconst report = $json.report;\n\nconst executionDuration = Date.now() - metadata.execution_start_time;\n\nlet performanceCategory = 'fast';\nif (executionDuration >= 5000) performanceCategory = 'slow';\nelse if (executionDuration >= 2000) performanceCategory = 'normal';\n\nreturn {\n  success: true,\n  message: 'Report generated successfully',\n  data: report,\n  metadata: {\n    execution_time_ms: executionDuration,\n    performance: performanceCategory,\n    workflow_version: 'enterprise-1.1.0',\n    timestamp: metadata.timestamp,\n    data_sources: ['leads', 'bookings', 'payments', 'campaigns', 'documents']\n  }\n};"
       },
       "id": "format-success",
       "name": "Format Success Response",
@@ -302,7 +302,7 @@
     {"id": "hipaa-ready", "name": "HIPAA-Ready"}
   ],
   "meta": {
-    "version": "enterprise-1.0.0",
+    "version": "enterprise-1.1.0",
     "branch": "Enterprise",
     "description": "Aigent Module 07 ENTERPRISE: Analytics & reporting with HIPAA compliance, aggregated KPIs, trend analysis, and multi-source data integration.",
     "author": "Aigent Systems",
