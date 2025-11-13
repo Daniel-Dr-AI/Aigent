@@ -1,0 +1,220 @@
+Here is a **precise summary of all the major issues you encountered, what caused them, and what fixed each one.**
+This should serve as your future checklist when setting up or debugging n8n integrations and workflow tests.
+
+---
+
+## **1. API Access Failures — “Unauthorized” and “Cannot GET /rest”**
+
+**Symptoms**
+
+* Calls to `/rest/workflows` failed with “Unauthorized.”
+* Even valid API keys didn’t work.
+
+**Cause**
+
+* n8n moved from `/rest/...` to `/api/v1/...` for all routes (post-1.40).
+* `N8N_PUBLIC_API_DISABLED` was not defined, which disables all external REST access even if `N8N_API_ENABLED=true`.
+
+**Fix**
+
+```bash
+# In .env
+N8N_API_ENABLED=true
+N8N_API_PATH=/api/v1
+N8N_API_KEY=<your key>
+N8N_PUBLIC_API_DISABLED=false
+```
+
+Then restart the container:
+
+```powershell
+docker compose down -v
+docker compose up -d --build
+```
+
+**✅ Result:**
+API now responds correctly at `/api/v1/...` endpoints and accepts your API key.
+
+---
+
+## **2. Webhook Tests Failing — “The requested webhook is not registered”**
+
+**Symptoms**
+
+* POSTs to `/webhook/connector-test` or `/connector-mock/mock-fetch` returned 404 or “not registered.”
+
+**Cause**
+
+* The target workflows (11A, 11B, 11C) were inactive or had conflicting webhook paths.
+* n8n only registers active workflows’ webhooks.
+
+**Fix**
+
+1. Activate all three workflows manually in the UI.
+2. Ensure unique webhook paths:
+
+   * 11A → `/webhook/connector/:operation`
+   * 11B → `/webhook/connector-mock/:operation`
+   * 11C → `/webhook/connector-test`
+
+**✅ Result:**
+All webhooks register properly and trigger their handlers.
+
+---
+
+## **3. “Cannot find module 'fs'” Errors in Code Nodes**
+
+**Symptoms**
+
+* Code nodes using Node.js built-ins like `fs`, `path`, or `axios` failed.
+
+**Cause**
+
+* By default, n8n sandbox disallows `require()` for built-in or external modules.
+
+**Fix**
+Add these environment variables in your Docker service definition or `.env`:
+
+```bash
+NODE_FUNCTION_ALLOW_BUILTIN=*
+NODE_FUNCTION_ALLOW_EXTERNAL=*
+```
+
+Restart container.
+
+**✅ Result:**
+Code nodes can now access Node.js modules and read/write cache files.
+
+---
+
+## **4. Filesystem Writes (Cache/Mocks) Not Persisting**
+
+**Symptoms**
+
+* Cache folder existed but `last_test_results.json` never appeared.
+
+**Cause**
+
+* `fs.writeFileSync()` wrote to a path that wasn’t mounted in Docker.
+
+**Fix**
+Mount host directories to container:
+
+```yaml
+volumes:
+  - ./Aigent_Modules_Core:/data/Aigent_Modules_Core
+  - ./Aigent_Modules_Enterprise:/data/Aigent_Modules_Enterprise
+  - ./exports:/data/exports
+```
+
+And set environment variables:
+
+```bash
+CACHE_PATH=/data/Aigent_Modules_Core/cache
+MOCK_BASE_PATH=/data/Aigent_Modules_Core/mocks
+```
+
+**✅ Result:**
+Cache and mock JSON files now persist to host disk and survive container restarts.
+
+---
+
+## **5. Conflicting Webhook Paths Between Workflows**
+
+**Symptoms**
+
+* n8n refused to activate 11A because 11B used the same URL path.
+
+**Cause**
+
+* Both defined `/webhook/connector/:operation`.
+* n8n requires globally unique webhook paths.
+
+**Fix**
+Rename one (usually 11B):
+
+* **11A** → `/webhook/connector/:operation`
+* **11B** → `/webhook/connector-mock/:operation`
+
+**✅ Result:**
+All workflows activate simultaneously with distinct URLs.
+
+---
+
+## **6. PowerShell Script Parsing Errors (“Missing terminator”, “Unexpected token”)**
+
+**Symptoms**
+
+* PowerShell refused to run diagnostic scripts you pasted.
+
+**Cause**
+
+* Smart quotes (`“ ”`), hidden Unicode line endings, or BOM corruption during copy-paste from chat.
+
+**Fix**
+
+1. Open Notepad → Paste the text manually.
+2. **File → Save As → Encoding: ANSI** (or UTF-8 *without BOM*).
+3. Verify quotes are plain `"` and not typographic.
+
+**✅ Result:**
+Script executes cleanly. (You can always test syntax quickly using `powershell -Command { Get-Command .\script.ps1 }`.)
+
+---
+
+## **7. Docker Compose Warning — “version is obsolete”**
+
+**Cause**
+
+* New Compose format ignores the `version:` key.
+
+**Fix**
+
+* Remove `version:` from the top of `docker-compose.yml`.
+* It’s informational only — no effect on runtime.
+
+---
+
+## **8. General Workflow Testing Design**
+
+**Goal**
+
+* Be able to test *all* modules (Core + Enterprise) with mock connectors, latency metrics, and cached reports.
+
+**What You Built**
+
+* **11A:** Connector Manager → routing, normalization, live/mock execution
+* **11B:** Mock Simulator → reads JSON mock responses from `/mocks/`
+* **11C:** Test Harness → loops through registry, runs each connector, aggregates results, and writes to `/cache/`
+
+**Best Practice Going Forward**
+
+* Keep mock JSONs under `Aigent_Modules_Core/mocks/`.
+* Each has predictable name: `<connector>_<endpoint>.json`.
+* Use the harness (`/webhook/connector-test`) to validate all connectors automatically after changes.
+
+---
+
+## **9. REST API Key Testing Checklist**
+
+| Check                  | Command                                                                                                               | Expected               |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Confirm key loaded     | `docker exec -it n8n printenv N8N_API_KEY`                                                                            | Shows valid token      |
+| Verify public API open | `docker exec -it n8n printenv N8N_PUBLIC_API_DISABLED`                                                                | `false`                |
+| Test access            | `Invoke-RestMethod -Headers @{ 'X-N8N-API-KEY' = $apiKey } -Uri "http://localhost:5678/api/v1/workflows?active=true"` | JSON list of workflows |
+
+---
+
+### **Summary**
+
+You now have:
+
+* Fully operational **API layer**
+* Working **Module 11A/11B/11C integration**
+* Persistent **cache and mocks**
+* A reproducible test procedure via PowerShell or API
+* Known fixes for Docker, environment, and PowerShell pitfalls
+
+---
+
+If you keep this checklist, you can rebuild or troubleshoot any future instance of your n8n + Aigent system within minutes without repeating these roadblocks.

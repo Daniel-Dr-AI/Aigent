@@ -1,0 +1,684 @@
+{
+  "name": "Aigent_Module_01_Core_V2_Intake_LeadCapture",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "intake-lead",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}",
+          "rawBody": false
+        }
+      },
+      "id": "webhook-node",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "notes": "CORE V2: CORS restricted to ALLOWED_ORIGINS variable\nPURPOSE: Accept lead form submissions\nSECURITY: Prevents CSRF attacks"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CORE V2: Enhanced metadata with body unwrapper\n// FIXES: Double-body wrapping issue from PowerShell/n8n HTTP nodes\n// Handles: { body: { body: {...} } }, { body: {...} }, and unwrapped {...}\nfunction unwrapBody(input) {\n  // Check for double-wrapped: { body: { body: {...} } }\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  // Check for single-wrapped: { body: {...} }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  // Unwrapped: { name: \"...\", email: \"...\" }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nconst timestamp = Date.now();\nconst random = Math.random().toString(36).substr(2, 6);\n\nreturn {\n  body: body,\n  trace_id: `LEAD-${timestamp}-${random}`,\n  timestamp: new Date().toISOString(),\n  workflow_version: 'core-1.1.0',\n  module: 'intake_lead_capture'\n};"
+      },
+      "id": "add-metadata",
+      "name": "Add Basic Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "notes": "CORE V2: Trace ID + Body Unwrapper\nFIXES: Double-body JSON wrapping from PowerShell/n8n\nSUPPORTS: Wrapped, double-wrapped, and unwrapped formats\nONLY: trace_id, timestamp, version\nNO: Rate limiting, IP tracking, deduplication"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CORE V2: Pre-validation to prevent IF node .length expression bug\n// This node validates all fields and returns a validation result\nconst body = $input.item.json.body || {};\nconst errors = [];\n\n// Required field checks with null safety\nif (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {\n  errors.push('name');\n} else if (body.name.length > 100) {\n  errors.push('name_length');\n}\n\nif (!body.email || typeof body.email !== 'string' || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.email)) {\n  errors.push('email');\n} else if (body.email.length > 255) {\n  errors.push('email_length');\n}\n\nif (!body.phone || typeof body.phone !== 'string' || body.phone.trim() === '') {\n  errors.push('phone');\n} else if (body.phone.length > 20) {\n  errors.push('phone_length');\n}\n\n// Return validation result\nreturn {\n  body: body,\n  trace_id: $input.item.json.trace_id,\n  timestamp: $input.item.json.timestamp,\n  valid: errors.length === 0,\n  errors: errors\n};"
+      },
+      "id": "pre-validation",
+      "name": "Pre-Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ],
+      "notes": "CORE V2: Pre-validation using Code node\nFIXES: n8n IF node .length expression serialization bug\nCHECKS: Required fields, length limits, email format"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "valid-check",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "validation-check",
+      "name": "Check Validation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        800,
+        300
+      ],
+      "notes": "CORE V2: Simple boolean check (no .length expressions)\nRELIABLE: No UI serialization issues"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CORE: Simple data normalization\nconst body = $input.item.json.body || {};\n\n// Basic name splitting\nconst nameParts = (body.name || '').trim().split(/\\s+/);\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.slice(1).join(' ') || '';\n\n// Basic phone cleaning (remove non-digits)\nconst phoneNormalized = (body.phone || '').replace(/\\D/g, '');\n\nreturn {\n  trace_id: $input.item.json.trace_id,\n  name: body.name || '',\n  first_name: firstName,\n  last_name: lastName,\n  email: (body.email || '').toLowerCase().trim(),\n  phone: phoneNormalized,\n  phone_display: body.phone || '',\n  interest: body.interest || 'General Inquiry',\n  referral_source: body.referral_source || 'Direct',\n  notes: body.notes || '',\n  timestamp: $input.item.json.timestamp\n};"
+      },
+      "id": "normalize-data",
+      "name": "Normalize Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        240
+      ],
+      "notes": "CORE: Basic data cleanup\nINCLUDES: Name split, phone cleanup, email lowercase\nNO: Lead scoring, IP tracking, duplicate detection"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_ID || 'YOUR_SHEET_ID_HERE'}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Leads'}}"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "trace_id": "={{ $json.trace_id }}",
+            "name": "={{ $json.name }}",
+            "first_name": "={{ $json.first_name }}",
+            "last_name": "={{ $json.last_name }}",
+            "email": "={{ $json.email }}",
+            "phone": "={{ $json.phone }}",
+            "phone_display": "={{ $json.phone_display }}",
+            "interest": "={{ $json.interest }}",
+            "referral_source": "={{ $json.referral_source }}",
+            "notes": "={{ $json.notes }}",
+            "status": "NEW"
+          },
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "append-sheets",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "notes": "CORE: Primary data storage\nRETRY: 2 attempts\nNON-BLOCKING: Continues if fails"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NOTIFICATION_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=\ud83c\udd95 New Lead\n\ud83d\udc64 Name: {{ $json.name.replace(/<[^>]*>/g, '').replace(/[<>\"']/g, '') }}\n\ud83d\udce7 Email: {{ $json.email }}\n\ud83d\udcf1 Phone: {{ $json.phone_display }}\n\ud83d\udca1 Interest: {{ $json.interest.replace(/<[^>]*>/g, '') }}\n\ud83d\udd17 Source: {{ $json.referral_source }}\n\ud83c\udd94 ID: {{ $json.trace_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "resolve-notification-connector",
+      "name": "Resolve Notification Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "notes": "M11 INTEGRATION: Resolve notification connector (Slack, Teams, etc.)\nNON-BLOCKING: continueOnFail prevents resolution failures from blocking workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'slack_webhook' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_notification"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { text: '🆕 New Lead\\n👤 Name: ' + $('Normalize Data').first().json.name.replace(/<[^>]*>/g, '').replace(/[<>\"']/g, '') + '\\n📧 Email: ' + $('Normalize Data').first().json.email + '\\n📱 Phone: ' + $('Normalize Data').first().json.phone_display + '\\n💡 Interest: ' + $('Normalize Data').first().json.interest.replace(/<[^>]*>/g, '') + '\\n🔗 Source: ' + $('Normalize Data').first().json.referral_source + '\\n🆔 ID: ' + $('Normalize Data').first().json.trace_id } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "execute-notification-connector",
+      "name": "Execute Notification (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        180
+      ],
+      "continueOnFail": true,
+      "notes": "M11 INTEGRATION: Execute notification via Module 11A\nSupports mock/live mode based on MOCK_MODE_GLOBAL\nNON-BLOCKING: continueOnFail prevents notification failures from blocking workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_01_core"
+            },
+            {
+              "name": "service_type",
+              "value": "notification"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "send-notification",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        400
+      ],
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A integration\nOLD: Direct NOTIFICATION_WEBHOOK_URL call\nNEW: Use 'Execute Notification (M11A)' instead\nCORE V2: HTML escaped to prevent XSS"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Thank you for your inquiry!",
+        "emailType": "text",
+        "message": "=Hi {{ $json.first_name }},\n\nThank you for contacting us regarding {{ $json.interest }}. We've received your information and will get back to you shortly.\n\nBest regards,\nThe Team",
+        "options": {}
+      },
+      "id": "resolve-email-connector",
+      "name": "Resolve Email Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        260
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11 INTEGRATION: Resolve email connector (SendGrid, etc.)\nDISABLED BY DEFAULT: Enable when ready to use Module 11A for emails\nNON-BLOCKING: continueOnFail prevents resolution failures from blocking workflow",
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_01_core"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to_email: $('Normalize Data').first().json.email, from_email: $env.SENDGRID_FROM_EMAIL || 'noreply@example.com', subject: 'Thank you for your inquiry!', message: 'Hi ' + $('Normalize Data').first().json.first_name + ',\\n\\nThank you for contacting us regarding ' + $('Normalize Data').first().json.interest + '. We have received your information and will get back to you shortly.\\n\\nBest regards,\\nThe Team' } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "execute-email-connector",
+      "name": "Execute Email (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        260
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "M11 INTEGRATION: Execute email via Module 11A\nSupports mock/live mode based on MOCK_MODE_GLOBAL\nDISABLED BY DEFAULT: Enable when ready to use Module 11A for emails\nNON-BLOCKING: continueOnFail prevents email failures from blocking workflow"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "Thank you for your inquiry!",
+        "emailType": "text",
+        "message": "=Hi {{ $json.first_name }},\n\nThank you for contacting us regarding {{ $json.interest }}. We've received your information and will get back to you shortly.\n\nBest regards,\nThe Team",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Auto-Reply Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        480
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "continueOnFail": true,
+      "disabled": true,
+      "notes": "LEGACY: Direct SendGrid integration\nDISABLED BY DEFAULT: Use Module 11A integration instead\nCORE: Simple auto-reply\nNO: HTML templates, branding customization"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"success\": true,\n  \"message\": \"Thank you! We received your information.\",\n  \"trace_id\": $json.trace_id,\n  \"timestamp\": $json.timestamp\n} }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "return-success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        240
+      ],
+      "notes": "CORE: Simple success response\nNO: Performance metrics, execution time tracking"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CORE V2: Field-specific error messages\nconst body = $input.item.json.body || {};\nconst missing = [];\n\nif (!body.name || body.name.trim() === '') missing.push('name (required)');\nelse if (body.name.length > 100) missing.push('name (max 100 chars)');\n\nif (!body.email || !/@/.test(body.email)) missing.push('email (valid format required)');\nelse if (body.email.length > 255) missing.push('email (max 255 chars)');\n\nif (!body.phone || body.phone.trim() === '') missing.push('phone (required)');\nelse if (body.phone.length > 20) missing.push('phone (max 20 chars)');\n\nreturn {\n  success: false,\n  error: missing.length > 0 ? `Validation failed: ${missing.join(', ')}` : 'Validation failed',\n  fields_with_errors: missing,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        360
+      ],
+      "notes": "CORE: Generic error message\nNO: Field-specific errors, debug info"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "return-error",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        360
+      ],
+      "notes": "CORE: Simple 400 error response"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CORE V2: Global error handler\nconst error = $input.item.json.error || {};\nconst prevData = $input.item.json;\n\nreturn {\n  success: false,\n  error: 'Internal server error',\n  error_message: error.message || 'Unknown error',\n  trace_id: prevData.trace_id || 'UNKNOWN',\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "global-error-handler",
+      "name": "Global Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        500
+      ],
+      "notes": "CORE V2: Catches all unhandled errors, prevents silent failures"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "return-error-500",
+      "name": "Return Server Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        500
+      ],
+      "notes": "CORE V2: Returns 500 error to client with trace_id"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Add Basic Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Basic Metadata": {
+      "main": [
+        [
+          {
+            "node": "Pre-Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pre-Validation": {
+      "main": [
+        [
+          {
+            "node": "Check Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Validation": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resolve Notification Connector (M11A)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resolve Email Connector (M11A)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Notification Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute Notification (M11A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Email Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute Email (M11A)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Return Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook-node": {},
+    "add-metadata": {},
+    "pre-validation": {},
+    "validation-check": {},
+    "normalize-data": {},
+    "append-sheets": {},
+    "send-notification": {},
+    "send-email": {},
+    "return-success": {},
+    "format-error": {},
+    "return-error": {},
+    "global-error-handler": {},
+    "return-error-500": {},
+    "Global Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Return Server Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-01",
+      "name": "Module-01"
+    },
+    {
+      "id": "smb-ready",
+      "name": "SMB-Ready"
+    }
+  ],
+  "meta": {
+    "version": "core-1.2.0",
+    "branch": "Core",
+    "description": "Aigent Module 01 CORE V3: Module 11 integration for universal connector management with mock/live mode switching for notifications and messaging.",
+    "target_users": "Small businesses (gyms, spas, salons, boutiques, service providers)",
+    "features": [
+      "Basic webhook entry (no auth)",
+      "Simple validation (required fields only)",
+      "Google Sheets logging",
+      "Module 11A notification connector resolution (Slack, Teams, etc.)",
+      "Module 11A email connector resolution (SendGrid, etc.)",
+      "Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "Optional email auto-reply (Module 11A or legacy SendGrid)",
+      "Trace ID generation",
+      "Parallel execution"
+    ],
+    "removed_enterprise_features": [
+      "API key authentication",
+      "Rate limiting",
+      "Deduplication",
+      "PHI masking",
+      "Client IP tracking",
+      "Lead scoring",
+      "HubSpot CRM integration",
+      "Execution time tracking",
+      "Detailed validation errors",
+      "Performance categorization"
+    ],
+    "required_vars": [
+      "GOOGLE_SHEET_ID (or use default placeholder)",
+      "N8N_BASE_URL (for Module 11A calls, e.g., http://localhost:5678)",
+      "CONNECTOR_REGISTRY_PATH (path to connectors_registry.json)"
+    ],
+    "optional_vars": [
+      "GOOGLE_SHEET_TAB (default: Leads)",
+      "MOCK_MODE_GLOBAL (true/false - enables mock data from Module 11B)",
+      "MOCK_BASE_PATH (path to mocks directory)",
+      "DEFAULT_TIMEOUT_MS (default: 10000)",
+      "NOTIFICATION_WEBHOOK_URL (legacy - for direct Slack/Teams webhook)",
+      "SENDGRID_FROM_EMAIL (if email enabled)"
+    ],
+    "required_credentials": [
+      "Google Sheets OAuth2 (for data storage)"
+    ],
+    "optional_credentials": [
+      "SendGrid API (if auto-reply enabled)"
+    ],
+    "setup_instructions": [
+      "1. Import Module 11A, 11B, and 11C to n8n and activate them",
+      "2. Set N8N_BASE_URL (e.g., http://localhost:5678)",
+      "3. Set CONNECTOR_REGISTRY_PATH to connectors_registry.json location",
+      "4. Set MOCK_MODE_GLOBAL=true for testing with mock data",
+      "5. Set MOCK_BASE_PATH to mocks directory",
+      "6. Import Module 01 V3 to n8n",
+      "7. Connect Google Sheets credential",
+      "8. Set GOOGLE_SHEET_ID variable (or edit node directly)",
+      "9. Test notifications in mock mode first",
+      "10. Optionally enable Module 11A email nodes (disabled by default)",
+      "11. Switch to live mode (MOCK_MODE_GLOBAL=false) for production",
+      "12. Activate workflow"
+    ],
+    "test_curl": "curl -X POST https://your-n8n-instance/webhook/intake-lead -H 'Content-Type: application/json' -d '{\"name\":\"John Doe\",\"email\":\"john@example.com\",\"phone\":\"555-1234\",\"interest\":\"General Inquiry\",\"referral_source\":\"Google\"}'",
+    "performance": {
+      "avg_execution_time_ms": 500,
+      "p95_execution_time_ms": 1000,
+      "note": "Faster than Enterprise due to fewer checks and integrations"
+    },
+    "compatibility": {
+      "n8n_version": "1.0+",
+      "pairs_with": "Module 02 Core, Module 07 Core",
+      "enterprise_upgrade_path": "Switch to Module 01 Enterprise for HIPAA compliance, auth, rate limiting"
+    },
+    "v2_improvements": [
+      "SECURITY: Fixed CORS wildcard (uses ALLOWED_ORIGINS variable)",
+      "VALIDATION: Added length limits (name<100, email<255, phone<20)",
+      "VALIDATION: Improved email regex validation",
+      "SECURITY: Added HTML escaping in notifications (XSS prevention)",
+      "RELIABILITY: Added global error handler with 500 responses",
+      "RELIABILITY: Improved trace_id uniqueness (timestamp + random)",
+      "UX: Field-specific error messages"
+    ],
+    "v3_improvements": [
+      "INTEGRATION: Added Module 11A notification connector resolution",
+      "INTEGRATION: Added Module 11A email connector resolution (disabled by default)",
+      "FLEXIBILITY: Support for multiple notification providers via connector registry",
+      "TESTING: Mock/live mode switching via MOCK_MODE_GLOBAL",
+      "ARCHITECTURE: Disabled direct API calls in favor of Module 11A (notifications enabled, email disabled)",
+      "RESILIENCE: Module 11A handles authentication, normalization, and error handling",
+      "SCALABILITY: Easy to add new connectors without modifying Module 01"
+    ],
+    "dependencies": [
+      "Module 11A: Connector Manager (required for notifications)",
+      "Module 11B: Mock Simulator (optional, for testing)",
+      "Module 11C: Test Harness (optional, for validation)"
+    ]
+  }
+}

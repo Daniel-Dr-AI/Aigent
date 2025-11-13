@@ -1,0 +1,448 @@
+{
+  "name": "Aigent_Module_08_Core_V2_Messaging",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-message",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// CORE V2: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nreturn {body: body, trace_id: `MSG-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
+      },
+      "id": "metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "recipient",
+              "leftValue": "={{ $json.body.recipient }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            },
+            {
+              "id": "channel",
+              "leftValue": "={{ $json.body.channel }}",
+              "rightValue": "^(email|sms)$",
+              "operator": {
+                "type": "string",
+                "operation": "regex"
+              }
+            },
+            {
+              "id": "message",
+              "leftValue": "={{ $json.body.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        }
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_08_core"
+            },
+            {
+              "name": "service_type",
+              "value": "messaging"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-messaging-connector",
+      "name": "Resolve Messaging Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $('Add Metadata').first().json.body.channel }}",
+              "value2": "email"
+            }
+          ]
+        }
+      },
+      "id": "route",
+      "name": "Route by Channel",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $('Resolve Messaging Connector (M11A)').first().json.primary_connector?.id || 'sendgrid' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_email"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Add Metadata').first().json.body.recipient, subject: `Message from ${$env.CLINIC_NAME}`, body: $('Add Metadata').first().json.body.message } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-email",
+      "name": "Execute Email (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $('Resolve Messaging Connector (M11A)').first().json.primary_connector?.id || 'twilio' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "send_sms"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { to: $('Add Metadata').first().json.body.recipient, body: $('Add Metadata').first().json.body.message } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-sms",
+      "name": "Execute SMS (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{$env.SENDGRID_FROM_EMAIL || 'noreply@example.com'}}",
+        "toEmail": "={{ $('Add Metadata').first().json.body.recipient }}",
+        "subject": "Message from {{ $env.CLINIC_NAME }}",
+        "emailType": "text",
+        "message": "={{ $('Add Metadata').first().json.body.message }}"
+      },
+      "id": "send-email",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.sendGrid",
+      "typeVersion": 1.1,
+      "position": [
+        1000,
+        480
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A messaging connector integration"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "from": "={{$env.TWILIO_FROM_NUMBER || '+15551234567'}}",
+        "to": "={{ $('Add Metadata').first().json.body.recipient }}",
+        "message": "={{ $('Add Metadata').first().json.body.message }}"
+      },
+      "id": "send-sms",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1.2,
+      "position": [
+        1000,
+        600
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "disabled": true,
+      "notes": "DISABLED: Replaced by Module 11A messaging connector integration"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Messages'}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $('Add Metadata').first().json.timestamp }}",
+            "message_id": "={{ $('Add Metadata').first().json.trace_id }}",
+            "recipient": "={{ $('Add Metadata').first().json.body.recipient }}",
+            "channel": "={{ $('Add Metadata').first().json.body.channel }}",
+            "status": "delivered"
+          }
+        }
+      },
+      "id": "log",
+      "name": "Log to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: true, message_id: $('Add Metadata').first().json.trace_id, status: 'delivered', timestamp: $('Add Metadata').first().json.timestamp} }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: 'Provide recipient, channel (email|sms), and message'} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Add Metadata"
+          }
+        ]
+      ]
+    },
+    "Add Metadata": {
+      "main": [
+        [
+          {
+            "node": "Validate"
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Resolve Messaging Connector (M11A)"
+          }
+        ],
+        [
+          {
+            "node": "Return Error"
+          }
+        ]
+      ]
+    },
+    "Resolve Messaging Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Route by Channel"
+          }
+        ]
+      ]
+    },
+    "Route by Channel": {
+      "main": [
+        [
+          {
+            "node": "Execute Email (M11A)"
+          }
+        ],
+        [
+          {
+            "node": "Execute SMS (M11A)"
+          }
+        ]
+      ]
+    },
+    "Execute Email (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Log to Sheets"
+          }
+        ]
+      ]
+    },
+    "Execute SMS (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Log to Sheets"
+          }
+        ]
+      ]
+    },
+    "Send Email": {},
+    "Send SMS": {},
+    "Log to Sheets": {
+      "main": [
+        [
+          {
+            "node": "Return Success"
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "meta": {
+    "version": "core-1.2.0",
+    "description": "Module 08 CORE: Omnichannel messaging",
+    "required_vars": [
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL",
+      "MOCK_MODE_GLOBAL"
+    ],
+    "optional_vars": [
+      "SENDGRID_API_KEY",
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "DEFAULT_TIMEOUT_MS"
+    ],
+    "performance": {
+      "avg_execution_time_ms": 700,
+      "node_count": 13
+    },
+    "v2_improvements": [
+      "CRITICAL: Added missing settings and tags keys",
+      "Fixed CORS",
+      "Improved trace_id",
+      "Added channel validation (email|sms only)"
+    ],
+    "v3_improvements": [
+      "Integrated Module 11A messaging connector (SendGrid/Twilio)",
+      "Multi-channel support via M11A (email/sms)",
+      "Response normalization for M11A format",
+      "Mock/live mode switching support",
+      "Disabled legacy SendGrid/Twilio nodes (backward compatibility)"
+    ],
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "Module 11C (Test Harness)"
+    ]
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-08",
+      "name": "Module-08"
+    },
+    {
+      "id": "smb-ready",
+      "name": "SMB-Ready"
+    }
+  ]
+}

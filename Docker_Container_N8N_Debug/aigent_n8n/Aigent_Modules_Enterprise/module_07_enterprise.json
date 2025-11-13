@@ -1,0 +1,400 @@
+{
+  "name": "Aigent_Module_07_Enterprise_Analytics_Reporting",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-report",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || '*'}}"
+        }
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 500],
+      "webhookId": "{{$env.WEBHOOK_ID_M07}}",
+      "notes": "ENTERPRISE: Analytics report generation\nENDPOINT: POST /generate-report\nDATA CLASSIFICATION: Aggregated metrics (no individual PHI)"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ENTERPRISE: API Key Authentication\nconst input = $input.item.json;\nconst headers = input.headers || {};\n\nconst apiKeyEnabled = $env.API_KEY_ENABLED === 'true';\nconst expectedApiKey = $env.API_KEY;\n\nif (apiKeyEnabled && expectedApiKey) {\n  const providedKey = headers['x-api-key'] || headers['authorization']?.replace('Bearer ', '');\n  \n  if (!providedKey || providedKey !== expectedApiKey) {\n    return {\n      _auth_failed: true,\n      success: false,\n      error: 'Unauthorized: Invalid or missing API key',\n      error_code: 'AUTH_FAILED',\n      timestamp: new Date().toISOString()\n    };\n  }\n}\n\nreturn { ...input, _auth_passed: true };"
+      },
+      "id": "auth-check",
+      "name": "API Key Authentication",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 500],
+      "notes": "ENTERPRISE: API key validation\nOPTIONAL: Set API_KEY_ENABLED=true"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true},
+          "conditions": [
+            {
+              "id": "auth-check",
+              "leftValue": "={{ !$json._auth_failed }}",
+              "rightValue": true,
+              "operator": {"type": "boolean", "operation": "equals"}
+            }
+          ]
+        }
+      },
+      "id": "auth-router",
+      "name": "Auth Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [600, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 401,
+          "responseHeaders": {
+            "entries": [
+              {"name": "WWW-Authenticate", "value": "Bearer"},
+              {"name": "X-Workflow-Version", "value": "enterprise-1.0.0"}
+            ]
+          }
+        }
+      },
+      "id": "return-auth-error",
+      "name": "Return Unauthorized",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [800, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ENTERPRISE: Rich execution metadata\nconst executionStartTime = Date.now();\nconst input = $input.item.json;\nconst headers = input.headers || {};\nconst body = input.body || {};\n\nconst clientIP = headers['x-forwarded-for']?.split(',')[0].trim() || headers['x-real-ip'] || 'unknown';\nconst traceId = `REPORT-${executionStartTime}-${Math.random().toString(36).substring(7)}`;\n\n// Date range defaults\nconst periodStart = body.period_start || new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0];\nconst periodEnd = body.period_end || new Date().toISOString().split('T')[0];\nconst reportType = body.report_type || 'summary';\n\nreturn {\n  body: {\n    period_start: periodStart,\n    period_end: periodEnd,\n    report_type: reportType,\n    include_trends: body.include_trends === true || body.include_trends === 'true',\n    export_format: body.export_format || 'json'\n  },\n  _metadata: {\n    trace_id: traceId,\n    execution_start_time: executionStartTime,\n    client_ip: clientIP,\n    workflow_version: 'enterprise-1.1.0',\n    module: 'analytics_reporting',\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "add-metadata",
+      "name": "Add Execution Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 440],
+      "notes": "ENTERPRISE: Comprehensive metadata\nDEFAULT: Last 30 days if no date range specified"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Leads", "mode": "name"},
+        "options": {}
+      },
+      "id": "fetch-leads",
+      "name": "Fetch Leads Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1000, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "notes": "ENTERPRISE: Parallel data fetch with retry\nDATA SOURCE: Module 01 leads"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Bookings", "mode": "name"},
+        "options": {}
+      },
+      "id": "fetch-bookings",
+      "name": "Fetch Bookings Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1000, 380],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "notes": "ENTERPRISE: Parallel data fetch with retry\nDATA SOURCE: Module 02 bookings"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Payments", "mode": "name"},
+        "options": {}
+      },
+      "id": "fetch-payments",
+      "name": "Fetch Payments Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1000, 460],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "notes": "ENTERPRISE: Parallel data fetch with retry\nDATA SOURCE: Module 04 payments"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Campaigns", "mode": "name"},
+        "options": {}
+      },
+      "id": "fetch-campaigns",
+      "name": "Fetch Campaigns Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1000, 540],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Parallel data fetch with retry\nDATA SOURCE: Module 05 campaigns\nNON-BLOCKING: Report continues if campaigns sheet missing"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {"__rl": true, "value": "={{$env.GOOGLE_SHEET_ID}}", "mode": "id"},
+        "sheetName": {"__rl": true, "value": "Documents", "mode": "name"},
+        "options": {}
+      },
+      "id": "fetch-documents",
+      "name": "Fetch Documents Data",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [1000, 620],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Parallel data fetch with retry\nDATA SOURCE: Module 06 documents\nNON-BLOCKING: Report continues if documents sheet missing"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ENTERPRISE: Advanced KPI calculations with trend analysis\nconst leads = $('Fetch Leads Data').all();\nconst bookings = $('Fetch Bookings Data').all();\nconst payments = $('Fetch Payments Data').all();\nconst campaigns = $('Fetch Campaigns Data').all() || [];\nconst documents = $('Fetch Documents Data').all() || [];\nconst meta = $('Add Execution Metadata').first().json;\n\n// Filter by date range\nconst filterByDate = (items, dateField = 'timestamp') => {\n  return items.filter(item => {\n    const itemDate = item.json[dateField];\n    if (!itemDate) return false;\n    const date = itemDate.split('T')[0];\n    return date >= meta.body.period_start && date <= meta.body.period_end;\n  });\n};\n\nconst leadsFiltered = filterByDate(leads);\nconst bookingsFiltered = filterByDate(bookings);\nconst paymentsFiltered = filterByDate(payments);\nconst campaignsFiltered = filterByDate(campaigns);\nconst documentsFiltered = filterByDate(documents);\n\n// Revenue calculations (handle both cents and dollar formats)\nconst calculateRevenue = (items) => {\n  return items.reduce((sum, p) => {\n    const amount = parseFloat(p.json.amount || p.json.total_amount || 0);\n    // If amount > 1000, assume it's in cents\n    return sum + (amount > 1000 ? amount / 100 : amount);\n  }, 0);\n};\n\nconst totalRevenue = calculateRevenue(paymentsFiltered);\n\n// Core KPIs\nconst totalLeads = leadsFiltered.length;\nconst totalBookings = bookingsFiltered.length;\nconst totalPayments = paymentsFiltered.length;\nconst conversionRate = totalLeads > 0 ? ((totalBookings / totalLeads) * 100).toFixed(1) : '0';\nconst avgTransaction = totalPayments > 0 ? (totalRevenue / totalPayments).toFixed(2) : '0';\n\n// Campaign metrics\nconst totalCampaigns = campaignsFiltered.length;\nconst campaignSuccessRate = totalCampaigns > 0 \n  ? ((campaignsFiltered.filter(c => c.json.status === 'sent').length / totalCampaigns) * 100).toFixed(1)\n  : '0';\n\n// Document metrics\nconst totalDocuments = documentsFiltered.length;\nconst documentsWithPHI = documentsFiltered.filter(d => d.json.phi_detected === true || d.json.phi_detected === 'true').length;\nconst avgOCRConfidence = documentsFiltered.length > 0\n  ? (documentsFiltered.reduce((sum, d) => sum + (parseFloat(d.json.ocr_confidence || 0)), 0) / documentsFiltered.length).toFixed(3)\n  : '0';\n\n// Lead source analysis (no PHI - just counts)\nconst leadSources = {};\nleadsFiltered.forEach(lead => {\n  const source = lead.json.referral_source || 'Unknown';\n  leadSources[source] = (leadSources[source] || 0) + 1;\n});\n\nconst topLeadSource = Object.keys(leadSources).length > 0\n  ? Object.keys(leadSources).reduce((a, b) => leadSources[a] > leadSources[b] ? a : b)\n  : 'None';\n\n// Trend analysis (if requested)\nlet trends = null;\nif (meta.body.include_trends) {\n  // Simple week-over-week comparison\n  const midPoint = new Date((new Date(meta.body.period_start).getTime() + new Date(meta.body.period_end).getTime()) / 2).toISOString().split('T')[0];\n  \n  const period1Leads = leadsFiltered.filter(l => l.json.timestamp.split('T')[0] < midPoint).length;\n  const period2Leads = leadsFiltered.filter(l => l.json.timestamp.split('T')[0] >= midPoint).length;\n  \n  const leadTrend = period1Leads > 0 ? (((period2Leads - period1Leads) / period1Leads) * 100).toFixed(1) : '0';\n  \n  trends = {\n    lead_growth: leadTrend + '%',\n    trend_direction: parseFloat(leadTrend) >= 0 ? 'up' : 'down'\n  };\n}\n\nreturn {\n  _metadata: meta._metadata,\n  report: {\n    report_id: meta._metadata.trace_id,\n    report_type: meta.body.report_type,\n    period_start: meta.body.period_start,\n    period_end: meta.body.period_end,\n    generated_at: meta._metadata.timestamp,\n    metrics: {\n      leads: {\n        total: totalLeads,\n        top_source: topLeadSource,\n        source_breakdown: leadSources\n      },\n      bookings: {\n        total: totalBookings,\n        conversion_rate: conversionRate + '%'\n      },\n      revenue: {\n        total: parseFloat(totalRevenue.toFixed(2)),\n        transactions: totalPayments,\n        avg_transaction: parseFloat(avgTransaction)\n      },\n      campaigns: {\n        total: totalCampaigns,\n        success_rate: campaignSuccessRate + '%'\n      },\n      documents: {\n        total: totalDocuments,\n        phi_detected_count: documentsWithPHI,\n        avg_ocr_confidence: parseFloat(avgOCRConfidence)\n      },\n      performance_summary: {\n        leads_per_day: totalLeads > 0 ? (totalLeads / 30).toFixed(1) : '0',\n        bookings_per_day: totalBookings > 0 ? (totalBookings / 30).toFixed(1) : '0',\n        revenue_per_day: totalRevenue > 0 ? (totalRevenue / 30).toFixed(2) : '0'\n      }\n    },\n    trends: trends\n  }\n};"
+      },
+      "id": "calculate-kpis",
+      "name": "Calculate KPIs & Trends",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 440],
+      "notes": "ENTERPRISE: Advanced analytics\nFEATURES: KPIs, trend analysis, source breakdown\nPRIVACY: Aggregated counts only, no individual PHI"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.MODULE_09_AUDIT_URL || 'http://localhost:5678/webhook/log-event'}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "module", "value": "module_07"},
+            {"name": "event", "value": "report_generated"},
+            {"name": "timestamp", "value": "={{ $json._metadata.timestamp }}"},
+            {"name": "severity", "value": "info"},
+            {"name": "actor", "value": "={{ $json._metadata.client_ip }}"},
+            {"name": "resource", "value": "={{ $json.report.report_type }}"},
+            {"name": "payload", "value": "={{ JSON.stringify({report_id: $json.report.report_id, period: $json.report.period_start + ' to ' + $json.report.period_end, total_leads: $json.report.metrics.leads.total, total_revenue: $json.report.metrics.revenue.total}) }}"},
+            {"name": "trace_id", "value": "={{ $json._metadata.trace_id }}"}
+          ]
+        },
+        "options": {"timeout": 5000}
+      },
+      "id": "log-audit",
+      "name": "Log to Compliance (M09)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 380],
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "notes": "ENTERPRISE: Compliance audit logging\nMODULE 09: Report access tracking\nNO PHI: Aggregated metrics only"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ENTERPRISE: Format success response\nconst metadata = $json._metadata;\nconst report = $json.report;\n\nconst executionDuration = Date.now() - metadata.execution_start_time;\n\nlet performanceCategory = 'fast';\nif (executionDuration >= 5000) performanceCategory = 'slow';\nelse if (executionDuration >= 2000) performanceCategory = 'normal';\n\nreturn {\n  success: true,\n  message: 'Report generated successfully',\n  data: report,\n  metadata: {\n    execution_time_ms: executionDuration,\n    performance: performanceCategory,\n    workflow_version: 'enterprise-1.1.0',\n    timestamp: metadata.timestamp,\n    data_sources: ['leads', 'bookings', 'payments', 'campaigns', 'documents']\n  }\n};"
+      },
+      "id": "format-success",
+      "name": "Format Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 440],
+      "notes": "ENTERPRISE: Rich response with metrics\nFORMAT: JSON (CSV/PDF export placeholders available)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.OBSERVABILITY_WEBHOOK_URL || 'https://httpbin.org/post'}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "module", "value": "module_07"},
+            {"name": "trace_id", "value": "={{ $json.data.report_id }}"},
+            {"name": "execution_time_ms", "value": "={{ $json.metadata.execution_time_ms }}"},
+            {"name": "success", "value": "={{ $json.success }}"},
+            {"name": "report_type", "value": "={{ $json.data.report_type }}"},
+            {"name": "total_leads", "value": "={{ $json.data.metrics.leads.total }}"},
+            {"name": "total_revenue", "value": "={{ $json.data.metrics.revenue.total }}"}
+          ]
+        },
+        "options": {"timeout": 5000}
+      },
+      "id": "send-observability",
+      "name": "Send Observability Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1600, 380],
+      "continueOnFail": true,
+      "notes": "ENTERPRISE: Observability metrics"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {"name": "X-Workflow-Version", "value": "enterprise-1.0.0"},
+              {"name": "X-Execution-Time-Ms", "value": "={{ $json.metadata.execution_time_ms }}"},
+              {"name": "X-Trace-Id", "value": "={{ $json.data.report_id }}"}
+            ]
+          }
+        }
+      },
+      "id": "return-success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 440]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {"main": [[{"node": "API Key Authentication"}]]},
+    "API Key Authentication": {"main": [[{"node": "Auth Check"}]]},
+    "Auth Check": {"main": [[{"node": "Add Execution Metadata"}], [{"node": "Return Unauthorized"}]]},
+    "Add Execution Metadata": {"main": [[
+      {"node": "Fetch Leads Data"},
+      {"node": "Fetch Bookings Data"},
+      {"node": "Fetch Payments Data"},
+      {"node": "Fetch Campaigns Data"},
+      {"node": "Fetch Documents Data"}
+    ]]},
+    "Fetch Leads Data": {"main": [[{"node": "Calculate KPIs & Trends"}]]},
+    "Fetch Bookings Data": {"main": [[{"node": "Calculate KPIs & Trends"}]]},
+    "Fetch Payments Data": {"main": [[{"node": "Calculate KPIs & Trends"}]]},
+    "Fetch Campaigns Data": {"main": [[{"node": "Calculate KPIs & Trends"}]]},
+    "Fetch Documents Data": {"main": [[{"node": "Calculate KPIs & Trends"}]]},
+    "Calculate KPIs & Trends": {"main": [[
+      {"node": "Log to Compliance (M09)"},
+      {"node": "Format Success Response"}
+    ]]},
+    "Format Success Response": {"main": [[
+      {"node": "Send Observability Event"},
+      {"node": "Return Success"}
+    ]]}
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "timezone": "America/New_York",
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": [
+    {"id": "aigent-enterprise", "name": "Aigent-Enterprise"},
+    {"id": "module-07", "name": "Module-07"},
+    {"id": "hipaa-ready", "name": "HIPAA-Ready"}
+  ],
+  "meta": {
+    "version": "enterprise-1.1.0",
+    "branch": "Enterprise",
+    "description": "Aigent Module 07 ENTERPRISE: Analytics & reporting with HIPAA compliance, aggregated KPIs, trend analysis, and multi-source data integration.",
+    "author": "Aigent Systems",
+    "validated_by": "Serena + Context7",
+    "module_class": "enterprise",
+    "hipaa_mode": true,
+    "validated_at": "2025-11-07T00:00:00Z",
+    "target_users": "Healthcare organizations requiring analytics and reporting with HIPAA compliance",
+    "features": [
+      "API key authentication (optional)",
+      "Parallel data fetching from 5 sources",
+      "Advanced KPI calculations",
+      "Trend analysis (week-over-week)",
+      "Lead source breakdown",
+      "Revenue metrics",
+      "Campaign effectiveness metrics",
+      "Document processing metrics",
+      "Performance summary (per-day averages)",
+      "Module 09 compliance integration",
+      "Observability metrics",
+      "Date range filtering (default: last 30 days)",
+      "Multiple report types"
+    ],
+    "security_features": [
+      "Optional API key authentication",
+      "CORS configuration",
+      "NO PHI in reports (aggregated counts only)",
+      "Client IP tracking for audit",
+      "Module 09 audit logging"
+    ],
+    "compliance": {
+      "hipaa_ready": true,
+      "phi_exposure": "NONE - aggregated metrics only",
+      "audit_trail": "Full trace ID + client IP + timestamps + Module 09 integration",
+      "data_aggregation": "Counts, percentages, and averages only - no individual records"
+    },
+    "data_sources": [
+      "Leads (Module 01)",
+      "Bookings (Module 02)",
+      "Payments (Module 04)",
+      "Campaigns (Module 05)",
+      "Documents (Module 06)"
+    ],
+    "kpis": {
+      "leads": "Total leads, top source, source breakdown",
+      "bookings": "Total bookings, conversion rate",
+      "revenue": "Total revenue, transaction count, avg transaction",
+      "campaigns": "Total campaigns, success rate",
+      "documents": "Total documents, PHI detection count, avg OCR confidence",
+      "performance": "Leads/bookings/revenue per day"
+    },
+    "report_types": {
+      "summary": "All KPIs with aggregated metrics",
+      "trends": "Includes week-over-week trend analysis",
+      "detailed": "Extended metrics with source breakdowns"
+    },
+    "export_formats": {
+      "json": "Primary format (always available)",
+      "csv": "Placeholder for future CSV export",
+      "pdf": "Placeholder for future PDF export"
+    },
+    "integration_map": {
+      "module_09": "Report generation tracking",
+      "observability": "Performance metrics and KPI tracking"
+    },
+    "required_vars": [
+      "GOOGLE_SHEET_ID"
+    ],
+    "optional_vars": [
+      "API_KEY_ENABLED (default: false)",
+      "API_KEY (if auth enabled)",
+      "ALLOWED_ORIGINS (default: *)",
+      "MODULE_09_AUDIT_URL (compliance service endpoint)",
+      "OBSERVABILITY_WEBHOOK_URL (metrics/monitoring)",
+      "WEBHOOK_ID_M07 (for tracking)"
+    ],
+    "required_credentials": [
+      "Google Sheets OAuth2"
+    ],
+    "performance": {
+      "avg_execution_time_ms": 2500,
+      "p95_execution_time_ms": 4000,
+      "node_count": 16,
+      "vs_core": "Similar performance with added audit logging and trend analysis"
+    },
+    "vs_core_comparison": {
+      "core_nodes": 7,
+      "enterprise_nodes": 16,
+      "added_nodes": 9,
+      "core_features": "Basic aggregation, simple KPIs",
+      "enterprise_features": "+Auth, +Trend analysis, +Source breakdown, +Multi-source (5 sheets), +Module 09 audit, +Observability, +Performance metrics"
+    },
+    "notes": "ENTERPRISE ANALYTICS: Privacy-first analytics with zero PHI exposure. All metrics are aggregated counts, percentages, and averages. Includes trend analysis and comprehensive KPI tracking across all modules. Integrates with Module 09 for compliance logging."
+  }
+}

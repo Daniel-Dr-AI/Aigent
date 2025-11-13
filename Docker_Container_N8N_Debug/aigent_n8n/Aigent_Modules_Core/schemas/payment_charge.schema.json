@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Payment Charge Schema",
+  "required": ["id", "amount", "currency", "status"],
+  "properties": {
+    "id": {"type": "string"},
+    "charge_id": {"type": "string"},
+    "amount": {"type": "number", "minimum": 0},
+    "currency": {"type": "string", "pattern": "^[A-Z]{3}$"},
+    "status": {"type": "string", "enum": ["succeeded", "pending", "failed"]},
+    "paid": {"type": "boolean"},
+    "receipt_url": {"type": "string", "format": "uri"},
+    "created": {"type": "number"},
+    "metadata": {"type": "object"}
+  }
+}

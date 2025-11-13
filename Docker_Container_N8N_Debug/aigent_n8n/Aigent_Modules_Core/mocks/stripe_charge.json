@@ -1,0 +1,22 @@
+{
+  "id": "ch_mock_1234567890abcdef",
+  "charge_id": "ch_mock_1234567890abcdef",
+  "object": "charge",
+  "amount": 15000,
+  "amount_captured": 15000,
+  "amount_refunded": 0,
+  "currency": "usd",
+  "customer": "cus_mock_customer123",
+  "description": "Healthcare service payment - Mock",
+  "status": "succeeded",
+  "paid": true,
+  "refunded": false,
+  "receipt_url": "https://pay.stripe.com/receipts/mock_receipt_12345",
+  "receipt_email": "patient@example.com",
+  "created": 1699545600,
+  "metadata": {
+    "trace_id": "MOCK-TRACE-12345",
+    "booking_id": "booking_mock_001",
+    "service_type": "Consultation"
+  }
+}

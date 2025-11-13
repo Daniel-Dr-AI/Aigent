@@ -1,0 +1,51 @@
+{
+  "success": false,
+  "total_connectors": 1,
+  "total_tests": 4,
+  "tests_passed": 0,
+  "tests_failed": 4,
+  "success_rate": "0.0",
+  "detailed_results": [
+    {
+      "connector_id": "cal_com",
+      "connector_name": "Cal.com",
+      "endpoints_tested": 2,
+      "test_results": [
+        {
+          "endpoint": "availability",
+          "mock": {
+            "success": false,
+            "error": "Invalid URL",
+            "source": "mock"
+          },
+          "live": {
+            "success": false,
+            "error": "Invalid URL",
+            "source": "live"
+          },
+          "schema_check": "skipped"
+        },
+        {
+          "endpoint": "bookings",
+          "mock": {
+            "success": false,
+            "error": "Invalid URL",
+            "source": "mock"
+          },
+          "live": {
+            "success": false,
+            "error": "Invalid URL",
+            "source": "live"
+          },
+          "schema_check": "skipped"
+        }
+      ],
+      "tests_passed": 0,
+      "tests_failed": 4,
+      "success_rate": "0.0",
+      "trace_id": "TEST-1763035119006-xc86fp"
+    }
+  ],
+  "timestamp": "2025-11-13T11:58:39.329Z",
+  "trace_id": "TEST-1763035119006-xc86fp"
+}

@@ -1,0 +1,37 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file:
+      - .env
+    environment:
+      - GENERIC_TIMEZONE=Europe/Stockholm
+      - NODE_ENV=production
+      - N8N_PORT=5678
+      - N8N_API_ENABLED=${N8N_API_ENABLED}
+      - N8N_API_PATH=${N8N_API_PATH}
+      - N8N_API_KEY=${N8N_API_KEY}
+      - N8N_BASIC_AUTH_ACTIVE=${N8N_BASIC_AUTH_ACTIVE}
+      - WEBHOOK_TUNNEL_URL=${N8N_BASE_URL}
+      - TZ=Europe/Stockholm
+
+      # === Allow Node.js built-in modules and external packages in Code nodes ===
+      - NODE_FUNCTION_ALLOW_BUILTIN=*
+      - NODE_FUNCTION_ALLOW_EXTERNAL=*
+
+    volumes:
+      # Persistent n8n data
+      - ./n8n_data:/home/node/.n8n
+
+      # Aigent Core and Enterprise module directories
+      - ./Aigent_Modules_Core:/data/Aigent_Modules_Core
+      - ./Aigent_Modules_Enterprise:/data/Aigent_Modules_Enterprise
+
+      # Mock payload directory
+      - ./Aigent_Modules_Core/mocks:/data/Aigent_Modules_Core/mocks
+
+      # Optional exports folder for backups and test outputs
+      - ./exports:/data/exports

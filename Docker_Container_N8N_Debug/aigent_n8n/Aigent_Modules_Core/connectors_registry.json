@@ -1,0 +1,190 @@
+[
+  {
+    "id": "cal_com",
+    "type": "calendar",
+    "name": "Cal.com",
+    "base_url": "http://localhost:5678/webhook/connector-mock",
+    "auth": {
+      "mode": "mock"
+    },
+    "endpoints": {
+      "availability": {
+        "path": "/mock-fetch",
+        "method": "POST",
+        "request_map": {
+          "date": "date",
+          "duration": "duration"
+        },
+        "response_map": {
+          "slots": "slots"
+        }
+      },
+      "bookings": {
+        "path": "/mock-fetch",
+        "method": "POST",
+        "request_map": {
+          "name": "customer_name",
+          "email": "email",
+          "phone": "phone",
+          "start_time": "start_time",
+          "duration": "duration",
+          "timezone": "timezone"
+        },
+        "response_map": {
+          "id": "booking_id"
+        }
+      }
+    },
+    "mock": {
+      "file": "/data/Aigent_Modules_Core/mocks/cal_com_availability.json",
+      "schema": "./schemas/calendar_availability.schema.json"
+    },
+    "modules_using": ["module_02_core", "module_02_enterprise"]
+  },
+  {
+    "id": "calendly",
+    "type": "calendar",
+    "name": "Calendly",
+    "base_url": "https://api.calendly.com",
+    "auth": {
+      "mode": "bearer",
+      "token_env": "CALENDLY_API_KEY"
+    },
+    "endpoints": {
+      "availability": {
+        "path": "/availability",
+        "method": "GET",
+        "request_map": {
+          "preferred_date": "start_time"
+        },
+        "response_map": {
+          "data": "slots"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/calendly_availability.json",
+      "schema": "./schemas/calendar_availability.schema.json"
+    },
+    "modules_using": ["module_02_core", "module_02_enterprise"]
+  },
+  {
+    "id": "google_calendar",
+    "type": "calendar",
+    "name": "Google Calendar",
+    "base_url": "https://www.googleapis.com/calendar/v3",
+    "auth": {
+      "mode": "oauth2",
+      "credential_name": "Google Calendar OAuth2"
+    },
+    "endpoints": {
+      "availability": {
+        "path": "/calendars/primary/events",
+        "method": "GET",
+        "request_map": {
+          "timeMin": "start_date",
+          "timeMax": "end_date"
+        },
+        "response_map": {
+          "items": "events"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/google_calendar_availability.json",
+      "schema": "./schemas/calendar_availability.schema.json"
+    },
+    "modules_using": ["module_02_core", "module_02_enterprise"]
+  },
+  {
+    "id": "zoom",
+    "type": "video",
+    "name": "Zoom",
+    "base_url": "https://api.zoom.us/v2",
+    "auth": {
+      "mode": "bearer",
+      "token_env": "VIDEO_PLATFORM_API_KEY"
+    },
+    "endpoints": {
+      "create_meeting": {
+        "path": "/meetings",
+        "method": "POST",
+        "request_map": {
+          "topic": "topic",
+          "type": "type",
+          "start_time": "start_time",
+          "duration": "duration",
+          "settings": "settings"
+        },
+        "response_map": {
+          "id": "meeting_id",
+          "join_url": "join_url",
+          "start_url": "start_url"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/zoom_meeting.json",
+      "schema": "./schemas/video_meeting.schema.json"
+    },
+    "modules_using": ["module_03_core", "module_03_enterprise"]
+  },
+  {
+    "id": "google_meet",
+    "type": "video",
+    "name": "Google Meet",
+    "base_url": "https://www.googleapis.com/calendar/v3",
+    "auth": {
+      "mode": "oauth2",
+      "credential_name": "Google Calendar OAuth2"
+    },
+    "endpoints": {
+      "create_meeting": {
+        "path": "/calendars/primary/events",
+        "method": "POST",
+        "request_map": {
+          "summary": "topic",
+          "start": "start_time",
+          "end": "end_time",
+          "conferenceData": "conference_settings"
+        },
+        "response_map": {
+          "conferenceData.entryPoints[0].uri": "join_url"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/google_meet_meeting.json",
+      "schema": "./schemas/video_meeting.schema.json"
+    },
+    "modules_using": ["module_03_core", "module_03_enterprise"]
+  },
+  {
+    "id": "doxy_me",
+    "type": "video",
+    "name": "Doxy.me",
+    "base_url": "https://api.doxy.me/api",
+    "auth": {
+      "mode": "apiKey",
+      "key_env": "DOXYME_API_KEY"
+    },
+    "endpoints": {
+      "create_meeting": {
+        "path": "/rooms",
+        "method": "POST",
+        "request_map": {
+          "name": "topic",
+          "scheduled_time": "start_time"
+        },
+        "response_map": {
+          "room_url": "join_url"
+        }
+      }
+    },
+    "mock": {
+      "file": "./mocks/doxyme_meeting.json",
+      "schema": "./schemas/video_meeting.schema.json"
+    },
+    "modules_using": ["module_03_enterprise"]
+  }
+]

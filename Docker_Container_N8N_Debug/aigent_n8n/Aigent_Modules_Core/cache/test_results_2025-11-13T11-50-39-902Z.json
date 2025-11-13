@@ -1,0 +1,49 @@
+{
+  "success": false,
+  "total_connectors": 1,
+  "total_tests": 4,
+  "tests_passed": 0,
+  "tests_failed": 4,
+  "success_rate": "0.0",
+  "detailed_results": [
+    {
+      "connector_id": "cal_com",
+      "endpoints_tested": 2,
+      "test_results": [
+        {
+          "endpoint": "availability",
+          "mock": {
+            "success": false,
+            "error": "$http is not defined",
+            "source": "mock"
+          },
+          "live": {
+            "success": false,
+            "error": "$http is not defined",
+            "source": "live"
+          },
+          "schema_check": "skipped"
+        },
+        {
+          "endpoint": "bookings",
+          "mock": {
+            "success": false,
+            "error": "$http is not defined",
+            "source": "mock"
+          },
+          "live": {
+            "success": false,
+            "error": "$http is not defined",
+            "source": "live"
+          },
+          "schema_check": "skipped"
+        }
+      ],
+      "tests_passed": 0,
+      "tests_failed": 4,
+      "trace_id": "TEST-1763034639472-yv9zqt"
+    }
+  ],
+  "timestamp": "2025-11-13T11:50:39.840Z",
+  "trace_id": "TEST-1763034639472-yv9zqt"
+}

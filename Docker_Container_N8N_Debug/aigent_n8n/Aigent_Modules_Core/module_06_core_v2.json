@@ -1,0 +1,412 @@
+{
+  "name": "Aigent_Module_06_Core_V2_Document_OCR",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "document-upload",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// CORE V2: Body unwrapper for PowerShell/n8n compatibility\nfunction unwrapBody(input) {\n  if (input.body && input.body.body && typeof input.body.body === 'object') {\n    return input.body.body;\n  }\n  if (input.body && typeof input.body === 'object') {\n    return input.body;\n  }\n  return input;\n}\n\nconst body = unwrapBody($input.item.json);\nreturn {body: body, trace_id: `DOC-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`, timestamp: new Date().toISOString()};"
+      },
+      "id": "metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "url",
+              "leftValue": "={{ $json.body.file_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        }
+      },
+      "id": "validate",
+      "name": "Validate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.file_url }}",
+        "options": {}
+      },
+      "id": "download",
+      "name": "Download File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-resolve",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "module_id",
+              "value": "module_06_core"
+            },
+            {
+              "name": "service_type",
+              "value": "ocr"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "resolve-ocr-connector",
+      "name": "Resolve OCR Connector (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/connector-execute",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.primary_connector?.id || 'google_cloud_vision' }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "detect_text"
+            },
+            {
+              "name": "payload",
+              "value": "={{ { image_data: $('Download File').first().json.data, document_type: $('Add Metadata').first().json.body.document_type || 'generic' } }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{$env.DEFAULT_TIMEOUT_MS || 10000}}"
+        }
+      },
+      "id": "execute-ocr-connector",
+      "name": "Execute OCR (M11A)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "imageText",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "id": "ocr",
+      "name": "Google Vision OCR",
+      "type": "n8n-nodes-base.googleCloudVision",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        480
+      ],
+      "notes": "DISABLED: Replaced by Module 11A OCR connector integration\nREQUIRES: Google Cloud Vision credential",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Module 11A response format\nconst response = $input.first().json;\nlet ocr = {};\n\nif (response.data) {\n  // Module 11A format\n  ocr = response.data;\n} else {\n  // Legacy format\n  ocr = response;\n}\n\nconst text = ocr.fullTextAnnotation?.text || ocr.text || ocr.extracted_text || '';\n// Simple field extraction\nconst nameMatch = text.match(/name[:\\s]+([a-zA-Z\\s]+)/i);\nconst dateMatch = text.match(/(\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4})/);\nconst amountMatch = text.match(/\\$([\\d,]+\\.?\\d*)/);\nreturn {\n  document_id: $('Add Metadata').first().json.trace_id,\n  file_url: $('Add Metadata').first().json.body.file_url,\n  ocr_text: text,\n  extracted: {name: nameMatch?.[1]?.trim(), date: dateMatch?.[0], amount: amountMatch?.[0]},\n  timestamp: $('Add Metadata').first().json.timestamp\n};"
+      },
+      "id": "extract",
+      "name": "Extract Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$env.GOOGLE_SHEET_TAB || 'Documents'}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "document_id": "={{ $json.document_id }}",
+            "file_url": "={{ $json.file_url }}",
+            "ocr_text": "={{ $json.ocr_text.substring(0, 500) }}",
+            "extracted_name": "={{ $json.extracted.name }}",
+            "extracted_date": "={{ $json.extracted.date }}",
+            "extracted_amount": "={{ $json.extracted.amount }}"
+          }
+        }
+      },
+      "id": "log",
+      "name": "Log to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        1400,
+        240
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{  {success: false, error: 'Provide file_url'} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "error",
+      "name": "Return Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.item.json.error || {};\nreturn {success: false, error: 'OCR processing error', error_message: error.message || 'Unknown', timestamp: new Date().toISOString()};"
+      },
+      "id": "global-error-handler",
+      "name": "Global Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "return-error-500",
+      "name": "Return Server Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1800,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Add Metadata"
+          }
+        ]
+      ]
+    },
+    "Add Metadata": {
+      "main": [
+        [
+          {
+            "node": "Validate"
+          }
+        ]
+      ]
+    },
+    "Validate": {
+      "main": [
+        [
+          {
+            "node": "Download File"
+          }
+        ],
+        [
+          {
+            "node": "Return Error"
+          }
+        ]
+      ]
+    },
+    "Download File": {
+      "main": [
+        [
+          {
+            "node": "Resolve OCR Connector (M11A)"
+          }
+        ]
+      ]
+    },
+    "Resolve OCR Connector (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Execute OCR (M11A)"
+          }
+        ]
+      ]
+    },
+    "Execute OCR (M11A)": {
+      "main": [
+        [
+          {
+            "node": "Extract Fields"
+          }
+        ]
+      ]
+    },
+    "Google Vision OCR": {},
+    "Extract Fields": {
+      "main": [
+        [
+          {
+            "node": "Log to Sheets"
+          }
+        ]
+      ]
+    },
+    "Log to Sheets": {
+      "main": [
+        [
+          {
+            "node": "Return Success"
+          }
+        ]
+      ]
+    },
+    "Global Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Return Server Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "meta": {
+    "version": "core-1.2.0",
+    "description": "Module 06 CORE: Document OCR",
+    "required_vars": [
+      "GOOGLE_SHEET_ID",
+      "N8N_BASE_URL",
+      "MOCK_MODE_GLOBAL"
+    ],
+    "optional_vars": [
+      "GOOGLE_CLOUD_VISION_API_KEY",
+      "DEFAULT_TIMEOUT_MS"
+    ],
+    "performance": {
+      "avg_execution_time_ms": 3000,
+      "node_count": 11
+    },
+    "v2_improvements": [
+      "CRITICAL: Added missing settings and tags keys",
+      "Fixed CORS",
+      "Improved trace_id",
+      "Added error handler"
+    ],
+    "v3_improvements": [
+      "Integrated Module 11A OCR connector (Google Cloud Vision)",
+      "Response normalization for M11A format",
+      "Mock/live mode switching support",
+      "Disabled legacy Google Vision node (backward compatibility)"
+    ],
+    "dependencies": [
+      "Module 11A (Connector Manager)",
+      "Module 11B (Mock Simulator)",
+      "Module 11C (Test Harness)"
+    ]
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-06",
+      "name": "Module-06"
+    },
+    {
+      "id": "smb-ready",
+      "name": "SMB-Ready"
+    }
+  ]
+}
