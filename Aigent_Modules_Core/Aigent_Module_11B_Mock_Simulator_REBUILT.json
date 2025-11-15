@@ -1,0 +1,405 @@
+{
+  "name": "Aigent_Module_11B_Mock_Simulator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "connector/:operation",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "webhook",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [200, 300],
+      "notes": "M11B: Mock simulator operations\nOperations: mock-fetch, mock-upload, mock-validate, mock-list"
+    },
+    {
+      "parameters": {
+        "jsCode": "const operation = $input.item.json.params?.operation || 'mock-fetch';\nconst body = $input.item.json.body || {};\nconst trace_id = `MOCK-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\n\nreturn {\n  operation: operation,\n  body: body,\n  trace_id: trace_id,\n  timestamp: new Date().toISOString()\n};"
+      },
+      "id": "metadata",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "fetch-check",
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "mock-fetch",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "upload-check",
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "mock-upload",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "validate-check",
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "mock-validate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "list-check",
+                    "leftValue": "={{ $json.operation }}",
+                    "rightValue": "mock-list",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-operation",
+      "name": "Route Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst connectorId = $input.item.json.body.connector_id;\nconst endpoint = $input.item.json.body.endpoint;\nconst mockDataInput = $input.item.json.body.mock_data;\n\nconst mockBasePath = process.env.MOCK_BASE_PATH || '/data/Aigent_Modules_Core/mocks';\n\nlet mockPath;\nlet attemptedPath;\n\nif (mockDataInput) {\n  if (typeof mockDataInput === 'object' && mockDataInput !== null && !Array.isArray(mockDataInput)) {\n    const endpointPath = mockDataInput[endpoint];\n    if (endpointPath) {\n      if (endpointPath.startsWith('/')) {\n        mockPath = endpointPath;\n      } else {\n        mockPath = `${mockBasePath}/${endpointPath}`;\n      }\n      attemptedPath = mockPath;\n    } else {\n      mockPath = `${mockBasePath}/${connectorId}_${endpoint}.json`;\n      attemptedPath = mockPath;\n    }\n  } else if (typeof mockDataInput === 'string') {\n    if (mockDataInput.startsWith('/')) {\n      mockPath = mockDataInput;\n    } else {\n      mockPath = `${mockBasePath}/${mockDataInput}`;\n    }\n    attemptedPath = mockPath;\n  } else {\n    mockPath = `${mockBasePath}/${connectorId}_${endpoint}.json`;\n    attemptedPath = mockPath;\n  }\n} else {\n  mockPath = `${mockBasePath}/${connectorId}_${endpoint}.json`;\n  attemptedPath = mockPath;\n}\n\ntry {\n  const mockData = fs.readFileSync(mockPath, 'utf8');\n  const mockResponse = JSON.parse(mockData);\n  \n  const latencyConfig = process.env.MOCK_LATENCY_MS || '0';\n  const [minLatency, maxLatency] = latencyConfig.includes('-') \n    ? latencyConfig.split('-').map(Number)\n    : [Number(latencyConfig), Number(latencyConfig)];\n  \n  const simulatedLatency = minLatency + Math.random() * (maxLatency - minLatency);\n  \n  const errorRate = parseFloat(process.env.MOCK_RANDOM_ERROR_RATE || '0');\n  const shouldError = Math.random() < errorRate;\n  \n  if (shouldError) {\n    return {\n      success: false,\n      source: 'mock',\n      error: 'mock_file_error',\n      error_message: 'Random error injection triggered',\n      connector_id: connectorId,\n      endpoint: endpoint,\n      attempted_path: attemptedPath,\n      trace_id: $input.item.json.trace_id,\n      simulated_latency_ms: Math.round(simulatedLatency)\n    };\n  }\n  \n  return {\n    success: true,\n    source: 'mock',\n    connector_id: connectorId,\n    endpoint: endpoint,\n    data: mockResponse,\n    mock_file: mockPath,\n    simulated_latency_ms: Math.round(simulatedLatency),\n    trace_id: $input.item.json.trace_id\n  };\n} catch (error) {\n  return {\n    success: false,\n    source: 'mock',\n    error: 'mock_file_error',\n    error_message: error.message,\n    connector_id: connectorId,\n    endpoint: endpoint,\n    attempted_path: attemptedPath,\n    trace_id: $input.item.json.trace_id\n  };\n}"
+      },
+      "id": "mock-fetch",
+      "name": "Mock Fetch Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 240],
+      "notes": "M11B: Serve stored mock JSON with latency/error simulation"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "upload-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "mock-upload",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-upload",
+      "name": "Check Upload",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [800, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst connectorId = $input.item.json.body.connector_id;\nconst endpoint = $input.item.json.body.endpoint;\nconst mockData = $input.item.json.body.mock_data;\n\nconst mockBasePath = process.env.MOCK_BASE_PATH || '/data/Aigent_Modules_Core/mocks';\n\nif (!fs.existsSync(mockBasePath)) {\n  fs.mkdirSync(mockBasePath, { recursive: true });\n}\n\nconst filename = `${connectorId}_${endpoint}.json`;\nconst mockPath = path.join(mockBasePath, filename);\n\ntry {\n  const dataToWrite = typeof mockData === 'string' \n    ? mockData \n    : JSON.stringify(mockData, null, 2);\n  \n  fs.writeFileSync(mockPath, dataToWrite, 'utf8');\n  \n  const indexPath = path.join(mockBasePath, 'index.json');\n  let index = [];\n  if (fs.existsSync(indexPath)) {\n    index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));\n  }\n  \n  const existing = index.find(i => i.connector_id === connectorId && i.endpoint === endpoint);\n  if (existing) {\n    existing.updated_at = new Date().toISOString();\n  } else {\n    index.push({\n      connector_id: connectorId,\n      endpoint: endpoint,\n      filename: filename,\n      created_at: new Date().toISOString()\n    });\n  }\n  \n  fs.writeFileSync(indexPath, JSON.stringify(index, null, 2), 'utf8');\n  \n  return {\n    success: true,\n    connector_id: connectorId,\n    endpoint: endpoint,\n    filename: filename,\n    path: mockPath,\n    trace_id: $input.item.json.trace_id\n  };\n} catch (error) {\n  return {\n    success: false,\n    error: 'Failed to upload mock',\n    error_message: error.message,\n    trace_id: $input.item.json.trace_id\n  };\n}"
+      },
+      "id": "mock-upload",
+      "name": "Mock Upload Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300],
+      "notes": "M11B: Save vendor JSON and update index"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "validate-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "mock-validate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-validate",
+      "name": "Check Validate",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [1000, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst connectorId = $input.item.json.body.connector_id;\nconst endpoint = $input.item.json.body.endpoint;\n\nconst mockBasePath = process.env.MOCK_BASE_PATH || '/data/Aigent_Modules_Core/mocks';\nconst schemaBasePath = process.env.SCHEMA_BASE_PATH || '/data/Aigent_Modules_Core/schemas';\n\nconst mockPath = path.join(mockBasePath, `${connectorId}_${endpoint}.json`);\nif (!fs.existsSync(mockPath)) {\n  return {\n    success: false,\n    error: 'Mock file not found',\n    path: mockPath,\n    trace_id: $input.item.json.trace_id\n  };\n}\n\nconst mockData = JSON.parse(fs.readFileSync(mockPath, 'utf8'));\n\nconst registry = globalThis.aigent_registry || [];\nif (!Array.isArray(registry) || registry.length === 0) {\n  return { success: false, error: 'registry_empty', trace_id: $input.item.json.trace_id };\n}\n\nconst connector = registry.find(c => c.id === connectorId);\n\nif (!connector || !connector.mock?.schema) {\n  return {\n    success: true,\n    warning: 'No schema defined for validation',\n    connector_id: connectorId,\n    trace_id: $input.item.json.trace_id\n  };\n}\n\nconst schemaPath = connector.mock.schema.startsWith('./') \n  ? path.join(schemaBasePath, connector.mock.schema.substring(2))\n  : path.join(schemaBasePath, connector.mock.schema);\n\nif (!fs.existsSync(schemaPath)) {\n  return {\n    success: false,\n    error: 'Schema file not found',\n    schema_path: schemaPath,\n    trace_id: $input.item.json.trace_id\n  };\n}\n\nconst schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));\n\nconst errors = [];\nconst checkRequired = (obj, schemaObj, path = '') => {\n  if (schemaObj.required && Array.isArray(schemaObj.required)) {\n    for (const field of schemaObj.required) {\n      if (!(field in obj)) {\n        errors.push(`Missing required field: ${path}${field}`);\n      }\n    }\n  }\n  \n  if (schemaObj.properties) {\n    for (const [key, propSchema] of Object.entries(schemaObj.properties)) {\n      if (obj[key] && propSchema.type === 'object' && propSchema.properties) {\n        checkRequired(obj[key], propSchema, `${path}${key}.`);\n      }\n    }\n  }\n};\n\ncheckRequired(mockData, schema);\n\nreturn {\n  success: errors.length === 0,\n  connector_id: connectorId,\n  endpoint: endpoint,\n  schema_conformance: errors.length === 0 ? 100 : 50,\n  validation_errors: errors,\n  trace_id: $input.item.json.trace_id\n};"
+      },
+      "id": "mock-validate",
+      "name": "Mock Validate Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 360],
+      "notes": "M11B: Validate mock JSON against schema"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "list-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "mock-list",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "check-list",
+      "name": "Check List",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [1200, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst mockBasePath = process.env.MOCK_BASE_PATH || '/data/Aigent_Modules_Core/mocks';\n\nconst indexPath = path.join(mockBasePath, 'index.json');\n\nif (!fs.existsSync(indexPath)) {\n  const files = fs.readdirSync(mockBasePath)\n    .filter(f => f.endsWith('.json') && f !== 'index.json');\n  \n  const index = files.map(f => {\n    const parts = f.replace('.json', '').split('_');\n    return {\n      connector_id: parts.slice(0, -1).join('_'),\n      endpoint: parts[parts.length - 1],\n      filename: f\n    };\n  });\n  \n  return {\n    success: true,\n    mocks: index,\n    count: index.length,\n    auto_generated: true,\n    trace_id: $input.item.json.trace_id\n  };\n}\n\nconst index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));\n\nreturn {\n  success: true,\n  mocks: index,\n  count: index.length,\n  trace_id: $input.item.json.trace_id\n};"
+      },
+      "id": "mock-list",
+      "name": "Mock List Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 420],
+      "notes": "M11B: List all available mock files"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "return-success",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1600, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: 'Invalid operation', operation: $('Add Metadata').first().json.operation, valid_operations: ['mock-fetch', 'mock-upload', 'mock-validate', 'mock-list']} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "return-invalid-op",
+      "name": "Return Invalid Operation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1400, 540]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [[{"node": "Add Metadata"}]]
+    },
+    "Add Metadata": {
+      "main": [[{"node": "Route Operation"}]]
+    },
+    "Route Operation": {
+      "main": [
+        [{"node": "Mock Fetch Handler"}],
+        [{"node": "Mock Upload Handler"}],
+        [{"node": "Mock Validate Handler"}],
+        [{"node": "Mock List Handler"}],
+        [{"node": "Return Invalid Operation"}]
+      ]
+    },
+    "Mock Fetch Handler": {
+      "main": [[{"node": "Return Success"}]]
+    },
+    "Check Upload": {
+      "main": [
+        [{"node": "Mock Upload Handler"}],
+        [{"node": "Check Validate"}]
+      ]
+    },
+    "Mock Upload Handler": {
+      "main": [[{"node": "Return Success"}]]
+    },
+    "Check Validate": {
+      "main": [
+        [{"node": "Mock Validate Handler"}],
+        [{"node": "Check List"}]
+      ]
+    },
+    "Mock Validate Handler": {
+      "main": [[{"node": "Return Success"}]]
+    },
+    "Check List": {
+      "main": [
+        [{"node": "Mock List Handler"}],
+        [{"node": "Return Invalid Operation"}]
+      ]
+    },
+    "Mock List Handler": {
+      "main": [[{"node": "Return Success"}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-11",
+      "name": "Module-11"
+    },
+    {
+      "id": "mock-simulator",
+      "name": "Mock-Simulator"
+    }
+  ],
+  "meta": {
+    "version": "1.0.0",
+    "branch": "Core",
+    "description": "Module 11B: Mock Simulator - Vendor-independent test mode with latency and error simulation",
+    "operations": [
+      "mock-fetch - Serve stored mock JSON response",
+      "mock-upload - Upload new vendor JSON file",
+      "mock-validate - Validate mock against schema",
+      "mock-list - List all available mocks"
+    ],
+    "required_vars": [],
+    "optional_vars": [
+      "MOCK_BASE_PATH (default: /data/Aigent_Modules_Core/mocks)",
+      "SCHEMA_BASE_PATH (default: /data/Aigent_Modules_Core/schemas)",
+      "MOCK_LATENCY_MS (e.g., '300-1200' for range)",
+      "MOCK_RANDOM_ERROR_RATE (e.g., '0.05' for 5%)",
+      "CONNECTOR_REGISTRY_PATH"
+    ],
+    "features": [
+      "Vendor JSON mock storage",
+      "Auto-generated mock index",
+      "Latency simulation",
+      "Random error injection",
+      "Schema validation",
+      "Mock file management"
+    ]
+  }
+}

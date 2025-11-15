@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "trace_id": "TEST-1763209761347-rx3dah",
+  "timestamp": "2025-11-15T12:29:24.761Z",
+  "duration_ms": 0,
+  "average_latency_ms": 630,
+  "total_connectors": 1,
+  "total_tests": 4,
+  "tests_passed": 4,
+  "tests_failed": 0,
+  "success_rate": "100.0",
+  "detailed_results": [
+    {
+      "connector_id": "cal_com",
+      "connector_name": "Cal.com",
+      "endpoints_tested": 2,
+      "test_results": [
+        {
+          "endpoint": "availability",
+          "mock": {
+            "success": true,
+            "duration_ms": 371,
+            "source": "mock",
+            "error": null
+          },
+          "live": {
+            "success": true,
+            "duration_ms": 891,
+            "source": "live",
+            "error": null
+          },
+          "schema_check": "skipped"
+        },
+        {
+          "endpoint": "bookings",
+          "mock": {
+            "success": true,
+            "duration_ms": 386,
+            "source": "mock",
+            "error": null
+          },
+          "live": {
+            "success": true,
+            "duration_ms": 871,
+            "source": "live",
+            "error": null
+          },
+          "schema_check": "skipped"
+        }
+      ],
+      "tests_passed": 4,
+      "tests_failed": 0,
+      "trace_id": "TEST-1763209761347-rx3dah"
+    }
+  ]
+}

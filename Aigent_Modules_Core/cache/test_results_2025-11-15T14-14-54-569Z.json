@@ -1,0 +1,20 @@
+{
+  "success": false,
+  "trace_id": "TEST-1763216094224-660l55",
+  "timestamp": "2025-11-15T14:14:54.499Z",
+  "duration_ms": 0,
+  "average_latency_ms": 0,
+  "total_connectors": 1,
+  "total_tests": 0,
+  "tests_passed": 0,
+  "tests_failed": 0,
+  "success_rate": "0.0",
+  "detailed_results": [
+    {
+      "success": false,
+      "error": "N8N_BASE_URL environment variable not set",
+      "connector_id": "cal_com",
+      "trace_id": "TEST-1763216094224-660l55"
+    }
+  ]
+}

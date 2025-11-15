@@ -1,0 +1,56 @@
+{
+  "success": true,
+  "trace_id": "TEST-1763217149102-vdap25",
+  "timestamp": "2025-11-15T14:32:32.313Z",
+  "duration_ms": 0,
+  "average_latency_ms": 600,
+  "total_connectors": 1,
+  "total_tests": 4,
+  "tests_passed": 4,
+  "tests_failed": 0,
+  "success_rate": "100.0",
+  "detailed_results": [
+    {
+      "connector_id": "cal_com",
+      "connector_name": "Cal.com",
+      "endpoints_tested": 2,
+      "test_results": [
+        {
+          "endpoint": "availability",
+          "mock": {
+            "success": true,
+            "duration_ms": 357,
+            "source": "mock",
+            "error": null
+          },
+          "live": {
+            "success": true,
+            "duration_ms": 861,
+            "source": "live",
+            "error": null
+          },
+          "schema_check": "skipped"
+        },
+        {
+          "endpoint": "bookings",
+          "mock": {
+            "success": true,
+            "duration_ms": 354,
+            "source": "mock",
+            "error": null
+          },
+          "live": {
+            "success": true,
+            "duration_ms": 828,
+            "source": "live",
+            "error": null
+          },
+          "schema_check": "skipped"
+        }
+      ],
+      "tests_passed": 4,
+      "tests_failed": 0,
+      "trace_id": "TEST-1763217149102-vdap25"
+    }
+  ]
+}

@@ -1,0 +1,826 @@
+{
+  "name": "Aigent_Module_11A_Connector_Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "connector-manager/:operation",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'https://yourdomain.com'}}"
+        }
+      },
+      "id": "7b4e8218-ac22-4303-a973-36f63dbb23e1",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        -800,
+        64
+      ],
+      "webhookId": "eae3109b-f891-42bb-9165-7c12aaeb9071",
+      "notes": "M11A: Dynamic connector operations via path parameter\nOperations: load, lookup, normalize, execute, connector-resolve"
+    },
+    {
+      "parameters": {
+        "jsCode": "const operation = $input.item.json.params?.operation || 'execute';\nconst body = $input.item.json.body || {};\nconst trace_id = `CONN-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\n\nreturn {\n  operation: operation,\n  body: body,\n  trace_id: trace_id,\n  timestamp: new Date().toISOString(),\n  start_time: Date.now()\n};"
+      },
+      "id": "d3402e41-8e00-4b79-8508-cb99271d0ee8",
+      "name": "Add Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = process.env.CONNECTOR_REGISTRY_PATH || '/data/Aigent_Modules_Core/connectors_registry.json';\n\ntry {\n  const registryData = fs.readFileSync(path, 'utf8');\n  const connectors = JSON.parse(registryData);\n  globalThis.aigent_registry = connectors;\n  \n  return {\n    success: true,\n    connectors: connectors,\n    registry_path: path,\n    connector_count: connectors.length,\n    trace_id: $input.item.json.trace_id\n  };\n} catch (error) {\n  return {\n    success: false,\n    error: 'registry_load_failed',\n    error_message: error.message,\n    registry_path: path,\n    trace_id: $input.item.json.trace_id\n  };\n}"
+      },
+      "id": "360bb8f4-05cc-47fd-9a39-a10f50e4c84e",
+      "name": "Load Registry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        64
+      ],
+      "notes": "M11A: Load connectors_registry.json from filesystem"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "success-check",
+                    "leftValue": "={{ $json.success }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c29e7f13-0f55-46d8-910a-655d0f52eba8",
+      "name": "Check Registry Loaded",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -208,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "load-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "load",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "normalize-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "normalize",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "execute-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "execute",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "resolve-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "connector-resolve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d3303c17-2a4b-4345-a05c-74c36a92a32f",
+      "name": "Route Operation",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        0,
+        0
+      ],
+      "notes": "M11A: Route to operation handler\nTrue = load, False = check other operations"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "lookup-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "lookup",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2a7042d4-0d90-4ff2-9c58-1143ef7c0cda",
+      "name": "Check Lookup",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        208,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const connectors = globalThis.aigent_registry || [];\nconst requestedId = $('Add Metadata').first().json.body.connector_id;\n\nconst connector = connectors.find(c => c.id === requestedId);\n\nif (!connector) {\n  return {\n    success: false,\n    error: 'Connector not found',\n    connector_id: requestedId,\n    available_connectors: connectors.map(c => c.id)\n  };\n}\n\nreturn {\n  success: true,\n  connector: connector,\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "835ba62d-07d7-478b-a5d4-c50e25888713",
+      "name": "Lookup Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "notes": "M11A: Find connector definition by ID"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "normalize-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "normalize",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b4ae0c06-b89b-40cf-a457-4204adea6896",
+      "name": "Check Normalize",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        208,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const connectors = globalThis.aigent_registry || [];\nconst connectorId = $('Add Metadata').first().json.body.connector_id;\nconst payload = $('Add Metadata').first().json.body.payload;\nconst direction = $('Add Metadata').first().json.body.direction || 'request';\n\nconst connector = connectors.find(c => c.id === connectorId);\nif (!connector) {\n  return { success: false, error: 'Connector not found' };\n}\n\nconst adapters = {\n  calendar: {\n    normalizeRequest: (req) => ({\n      date: req.date || req.preferred_date || new Date().toISOString().split('T')[0],\n      duration: req.duration || 30,\n      timezone: req.timezone || 'America/New_York'\n    }),\n    normalizeResponse: (res) => ({\n      slots: res.slots || res.data?.slots || res.available_times || [],\n      next_available: res.next_available || (res.slots && res.slots[0]) || null\n    })\n  },\n  messaging: {\n    normalizeRequest: (req) => ({\n      recipient: req.recipient || req.to || req.email,\n      message: req.message || req.body || req.text,\n      channel: req.channel || 'email'\n    }),\n    normalizeResponse: (res) => ({\n      message_id: res.message_id || res.id || res.sid,\n      status: res.status || 'sent'\n    })\n  },\n  video: {\n    normalizeRequest: (req) => ({\n      topic: req.topic || 'Video Meeting',\n      start_time: req.start_time || new Date().toISOString(),\n      duration: req.duration || 60\n    }),\n    normalizeResponse: (res) => ({\n      meeting_id: res.meeting_id || res.id,\n      join_url: res.join_url || res.url,\n      start_url: res.start_url || res.host_url\n    })\n  },\n  payment: {\n    normalizeRequest: (req) => ({\n      amount: req.amount,\n      currency: req.currency || 'USD',\n      customer_email: req.customer_email || req.email\n    }),\n    normalizeResponse: (res) => ({\n      charge_id: res.charge_id || res.id,\n      status: res.status,\n      receipt_url: res.receipt_url\n    })\n  },\n  storage: {\n    normalizeRequest: (req) => req,\n    normalizeResponse: (res) => res\n  },\n  crm: {\n    normalizeRequest: (req) => ({\n      fields: req.fields || req.data\n    }),\n    normalizeResponse: (res) => ({\n      record_id: res.record_id || res.id\n    })\n  }\n};\n\nconst adapter = adapters[connector.type] || { normalizeRequest: (r) => r, normalizeResponse: (r) => r };\nconst normalized = direction === 'request' \n  ? adapter.normalizeRequest(payload)\n  : adapter.normalizeResponse(payload);\n\nreturn {\n  success: true,\n  connector_id: connectorId,\n  connector_type: connector.type,\n  direction: direction,\n  original_payload: payload,\n  normalized_payload: normalized,\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "3f86aedf-e22d-4590-9fba-5b5c3685b31d",
+      "name": "Normalize Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        64
+      ],
+      "notes": "M11A: Apply type-specific normalization adapters"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "execute-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "execute",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8ce85a00-5a02-42f9-bbb1-801611713781",
+      "name": "Check Execute",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        400,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const mockModeGlobal = (process.env.MOCK_MODE_GLOBAL || 'false').toLowerCase() === 'true';\nconst connectors = globalThis.aigent_registry || [];\nconst connectorId = $('Add Metadata').first().json.body.connector_id;\nconst endpoint = $('Add Metadata').first().json.body.endpoint;\nconst payload = $('Add Metadata').first().json.body.payload;\n\nconst connector = connectors.find(c => c.id === connectorId);\nif (!connector) {\n  return { success: false, error: 'Connector not found', connector_id: connectorId };\n}\n\nif (!connector.endpoints[endpoint]) {\n  return { success: false, error: 'Endpoint not found', endpoint: endpoint, available_endpoints: Object.keys(connector.endpoints) };\n}\n\nconst endpointDef = connector.endpoints[endpoint];\n\nconst connectorType = connector.type.toUpperCase();\nconst typeMockEnv = `MOCK_${connectorType}`;\nconst connectorMockMode = process.env[typeMockEnv];\n\nlet useMock = false;\nlet mockReason = '';\n\nif (mockModeGlobal) {\n  useMock = true;\n  mockReason = 'MOCK_MODE_GLOBAL=true';\n} else if (connectorMockMode && connectorMockMode.toLowerCase() === 'true') {\n  useMock = true;\n  mockReason = `${typeMockEnv}=true`;\n} else {\n  const tokenEnv = connector.auth.token_env || connector.auth.key_env;\n  const credValue = tokenEnv ? process.env[tokenEnv] : null;\n  \n  if (!credValue || credValue.trim() === '') {\n    useMock = true;\n    mockReason = 'credentials_missing';\n  }\n}\n\nif (useMock) {\n  let mockDataValue = connector.mock_data;\n  \n  return {\n    success: true,\n    mode: 'mock',\n    connector_id: connectorId,\n    endpoint: endpoint,\n    mock_data: mockDataValue,\n    mock_reason: mockReason,\n    delegate_to: 'module_11B',\n    payload: payload,\n    trace_id: $('Add Metadata').first().json.trace_id\n  };\n}\n\nreturn {\n  success: true,\n  mode: 'live',\n  connector_id: connectorId,\n  endpoint: endpoint,\n  payload: payload,\n  connector: connector,\n  endpointDef: endpointDef,\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "87abc208-00b5-406d-bd7d-54eee1daaa4a",
+      "name": "Execute Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        128
+      ],
+      "notes": "M11A: Determine mode (live/mock) and prepare request"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "mode-check",
+                    "leftValue": "={{ $json.mode }}",
+                    "rightValue": "mock",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "941e2c10-f1be-4ca7-86cf-ea52d42d5a41",
+      "name": "Check Mode",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        800,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.N8N_BASE_URL}}/webhook/connector/mock-fetch",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "connector_id",
+              "value": "={{ $json.connector_id }}"
+            },
+            {
+              "name": "endpoint",
+              "value": "={{ $json.endpoint }}"
+            },
+            {
+              "name": "mock_data",
+              "value": "={{ $json.mock_data }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "d8e8c0d9-4877-4277-af20-32ed897445ea",
+      "name": "Call Mock Simulator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1008,
+        64
+      ],
+      "notes": "M11A: Delegate to M11B for mock response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const axios = require('axios');\nconst execData = $input.item.json;\nconst connector = execData.connector;\nconst endpointDef = execData.endpointDef;\nconst payload = execData.payload;\n\nconst headers = {\n  'Content-Type': 'application/json',\n  'User-Agent': 'Aigent-ConnectorManager/1.0'\n};\n\nif (connector.auth.mode === 'bearer') {\n  const token = process.env[connector.auth.token_env];\n  if (token) {\n    headers['Authorization'] = `Bearer ${token}`;\n  } else {\n    return {\n      success: false,\n      error_type: 'auth_error',\n      error_message: `Missing token: ${connector.auth.token_env}`,\n      connector_id: execData.connector_id,\n      endpoint: execData.endpoint,\n      trace_id: execData.trace_id\n    };\n  }\n} else if (connector.auth.mode === 'apiKey') {\n  const key = process.env[connector.auth.key_env];\n  if (key) {\n    headers['Authorization'] = `Bearer ${key}`;\n  } else {\n    return {\n      success: false,\n      error_type: 'auth_error',\n      error_message: `Missing API key: ${connector.auth.key_env}`,\n      connector_id: execData.connector_id,\n      endpoint: execData.endpoint,\n      trace_id: execData.trace_id\n    };\n  }\n}\n\nconst mappedPayload = {};\nfor (const [targetKey, sourceKey] of Object.entries(endpointDef.request_map || {})) {\n  mappedPayload[targetKey] = payload[sourceKey] !== undefined ? payload[sourceKey] : payload[targetKey];\n}\n\nlet baseUrl = connector.base_url.replace(/{{\\$env\\.(\\w+)}}/g, (match, envVar) => {\n  return process.env[envVar] || match;\n});\n\nif (!baseUrl.endsWith('/') && !endpointDef.path.startsWith('/')) {\n  baseUrl += '/';\n}\nif (baseUrl.endsWith('/') && endpointDef.path.startsWith('/')) {\n  baseUrl = baseUrl.slice(0, -1);\n}\n\nconst url = baseUrl + endpointDef.path;\nconst method = endpointDef.method.toUpperCase();\nconst timeout = parseInt(process.env.DEFAULT_TIMEOUT_MS || '10000');\n\nlet requestConfig = {\n  method: method,\n  url: url,\n  headers: headers,\n  timeout: timeout\n};\n\nif (method === 'GET') {\n  requestConfig.params = mappedPayload;\n} else {\n  requestConfig.data = mappedPayload;\n}\n\ntry {\n  const startTime = Date.now();\n  const response = await axios(requestConfig);\n  const duration = Date.now() - startTime;\n  \n  const mappedResponse = {};\n  for (const [targetKey, sourcePath] of Object.entries(endpointDef.response_map || {})) {\n    const keys = sourcePath.split('.');\n    let val = response.data;\n    for (const k of keys) {\n      val = val?.[k];\n    }\n    mappedResponse[targetKey] = val;\n  }\n  \n  return {\n    success: true,\n    source: 'live',\n    connector_id: execData.connector_id,\n    endpoint: execData.endpoint,\n    data: mappedResponse,\n    raw_response: response.data,\n    status_code: response.status,\n    duration_ms: duration,\n    trace_id: execData.trace_id\n  };\n} catch (error) {\n  let errorType = 'network_error';\n  let errorMessage = error.message;\n  let statusCode = null;\n  let rawResponse = null;\n  \n  if (error.response) {\n    statusCode = error.response.status;\n    rawResponse = error.response.data;\n    \n    if (statusCode === 401 || statusCode === 403) {\n      errorType = 'auth_error';\n      errorMessage = `Authentication failed: ${statusCode}`;\n    } else if (statusCode >= 400 && statusCode < 500) {\n      errorType = 'http_error';\n      errorMessage = `Client error: ${statusCode}`;\n    } else if (statusCode >= 500) {\n      errorType = 'http_error';\n      errorMessage = `Server error: ${statusCode}`;\n    }\n  } else if (error.code === 'ECONNABORTED') {\n    errorType = 'network_error';\n    errorMessage = 'Request timeout';\n  } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {\n    errorType = 'network_error';\n    errorMessage = `Network error: ${error.code}`;\n  }\n  \n  return {\n    success: false,\n    source: 'live',\n    error_type: errorType,\n    error_message: errorMessage,\n    status_code: statusCode,\n    raw_response: rawResponse,\n    connector_id: execData.connector_id,\n    endpoint: execData.endpoint,\n    trace_id: execData.trace_id\n  };\n}"
+      },
+      "id": "b070aab5-2eda-44ff-aaa3-7509ad0390d6",
+      "name": "Execute Live Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        192
+      ],
+      "notes": "M11A: Execute actual HTTP request to external API"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "resolve-check",
+                    "leftValue": "={{ $('Add Metadata').first().json.operation }}",
+                    "rightValue": "connector-resolve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "14c3728d-3313-4a39-a9c3-d4ad4b483bd7",
+      "name": "Check Resolve",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        608,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const connectors = globalThis.aigent_registry || [];\nconst moduleId = $('Add Metadata').first().json.body.module_id;\nconst serviceType = $('Add Metadata').first().json.body.service_type;\n\nconst moduleConnectors = connectors.filter(c => \n  c.modules_using.includes(moduleId) ||\n  (serviceType && c.type === serviceType)\n);\n\nif (moduleConnectors.length === 0) {\n  return {\n    success: false,\n    error: 'No connectors found',\n    module_id: moduleId,\n    service_type: serviceType\n  };\n}\n\nconst primary = moduleConnectors[0];\n\nreturn {\n  success: true,\n  module_id: moduleId,\n  service_type: serviceType,\n  primary_connector: {\n    id: primary.id,\n    name: primary.name,\n    type: primary.type,\n    base_url: primary.base_url,\n    endpoints: Object.keys(primary.endpoints)\n  },\n  alternatives: moduleConnectors.slice(1).map(c => ({\n    id: c.id,\n    name: c.name\n  })),\n  trace_id: $('Add Metadata').first().json.trace_id\n};"
+      },
+      "id": "4a503e7b-77bf-4024-8ee2-9850d3e6c12b",
+      "name": "Resolve Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        304
+      ],
+      "notes": "M11A: Resolve connector config for calling module"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "a711c97a-6eaa-45ff-b99b-f04047e9f167",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: 'Registry load failed', details: $('Load Registry').first().json} }}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "b739d55f-9fa4-4051-b51a-4e96341d3e1f",
+      "name": "Return Registry Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {success: false, error: 'Invalid operation', operation: $('Add Metadata').first().json.operation, valid_operations: ['load', 'lookup', 'normalize', 'execute', 'connector-resolve']} }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "485bed4f-295a-4093-b074-770e587cc3b0",
+      "name": "Return Invalid Operation",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        800,
+        400
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Add Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Metadata": {
+      "main": [
+        [
+          {
+            "node": "Load Registry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Registry": {
+      "main": [
+        [
+          {
+            "node": "Check Registry Loaded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Registry Loaded": {
+      "main": [
+        [
+          {
+            "node": "Route Operation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Registry Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Operation": {
+      "main": [
+        [
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lookup Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lookup Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Lookup Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Invalid Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Lookup": {
+      "main": [
+        [
+          {
+            "node": "Lookup Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Handler": {
+      "main": [
+        [
+          {
+            "node": "Normalize Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Normalize": {
+      "main": [
+        [
+          {
+            "node": "Normalize Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Handler": {
+      "main": [
+        [
+          {
+            "node": "Check Execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Execute": {
+      "main": [
+        [
+          {
+            "node": "Execute Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Handler": {
+      "main": [
+        [
+          {
+            "node": "Check Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Mode": {
+      "main": [
+        [
+          {
+            "node": "Call Mock Simulator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Live Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Mock Simulator": {
+      "main": [
+        [
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Live Request": {
+      "main": [
+        [
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Resolve": {
+      "main": [
+        [
+          {
+            "node": "Resolve Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Handler": {
+      "main": [
+        [
+          {
+            "node": "Return Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "eb432ed2-b735-4041-a1b5-f065c386891e",
+  "meta": {
+    "instanceId": "183e7bedd90177ab2e69f3d391065562508191e95b18cfcc507609844c8be0cd"
+  },
+  "id": "dypbjzMGJr4SuKWj",
+  "tags": [
+    {
+      "updatedAt": "2025-11-12T12:36:55.052Z",
+      "createdAt": "2025-11-12T12:36:55.052Z",
+      "id": "QhsoRgP3hBY27jqW",
+      "name": "Module-11"
+    },
+    {
+      "updatedAt": "2025-11-12T12:36:55.000Z",
+      "createdAt": "2025-11-12T12:36:55.000Z",
+      "id": "TodhYJMZzx6tc5B2",
+      "name": "Connector-Manager"
+    },
+    {
+      "updatedAt": "2025-11-08T07:44:07.442Z",
+      "createdAt": "2025-11-08T07:44:07.442Z",
+      "id": "rsRtS3EYyV7yRzDE",
+      "name": "Aigent-Core"
+    }
+  ]
+}

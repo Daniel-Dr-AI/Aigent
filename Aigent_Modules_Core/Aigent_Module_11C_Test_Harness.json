@@ -10,95 +10,135 @@
           "allowedOrigins": "={{$env.ALLOWED_ORIGINS || 'http://localhost'}}"
         }
       },
-      "id": "webhook",
+      "id": "700898f6-ffdd-4cab-895f-318635878782",
       "name": "Webhook Trigger",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
-      "position": [200, 300],
+      "position": [0, 0],
+      "webhookId": "fb40954d-7f10-43ad-8bf3-a747d11e01a9",
       "notes": "M11C: Automated connector testing"
     },
     {
       "parameters": {
-        "jsCode": "// Add metadata\nconst body = $input.item.json.body || {};\nconst trace_id = `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\nreturn {\n  test_mode: body.test_mode || 'all',\n  connector_id: body.connector_id || null,\n  trace_id,\n  timestamp: new Date().toISOString(),\n  start_time: Date.now()\n};"
+        "jsCode": "const body = $input.item.json.body || {};\nconst trace_id = `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\nreturn {\n  test_mode: body.test_mode || 'all',\n  connector_id: body.connector_id || null,\n  trace_id,\n  timestamp: new Date().toISOString(),\n  start_time: Date.now()\n};"
       },
-      "id": "metadata",
+      "id": "cd995535-6ec6-41bd-b122-dc83e698f94c",
       "name": "Add Metadata",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [400, 300]
+      "position": [208, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Load registry file\nconst fs = require('fs');\nconst registryPath = process.env.CONNECTOR_REGISTRY_PATH || '/data/Aigent_Modules_Core/connectors_registry.json';\nconst registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));\n\nconst testMode = $input.item.json.test_mode;\nconst targetId = $input.item.json.connector_id;\nlet testTargets = [];\n\nif (testMode === 'single' && targetId) {\n  const connector = registry.find(c => c.id === targetId);\n  if (connector) testTargets = [connector];\n} else {\n  const underTest = process.env.CONNECTOR_UNDER_TEST;\n  if (underTest) {\n    const connector = registry.find(c => c.id === underTest);\n    if (connector) testTargets = [connector];\n  } else {\n    testTargets = registry;\n  }\n}\nreturn {\n  test_targets: testTargets,\n  total_connectors: testTargets.length,\n  trace_id: $input.item.json.trace_id,\n  start_time: $input.item.json.start_time\n};"
+        "jsCode": "const trace_id = $input.item.json.trace_id;\nconst start_time = $input.item.json.start_time;\n\ntry {\n  const baseUrl = process.env.N8N_BASE_URL || \"http://localhost:5678\";\n\n  const loadResponse = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `${baseUrl}/webhook/eae3109b-f891-42bb-9165-7c12aaeb9071/connector-manager/load`,\n    body: { operation: 'load' },\n    json: true,\n    timeout: 5000\n  });\n\n  if (!loadResponse || !loadResponse.success) {\n    return {\n      success: false,\n      error: 'registry_load_failed',\n      details: loadResponse,\n      trace_id,\n      start_time\n    };\n  }\n\n  return {\n    success: true,\n    connectors: loadResponse.connectors || [],\n    connector_count: loadResponse.connector_count || 0,\n    trace_id,\n    start_time\n  };\n\n} catch (error) {\n  return {\n    success: false,\n    error: 'registry_load_failed',\n    error_message: error.message,\n    trace_id,\n    start_time\n  };\n}"
       },
-      "id": "load-targets",
+      "id": "7289394b-32c5-401c-9747-356f1a337820",
+      "name": "Load Registry",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 0],
+      "notes": "M11C: Load registry via Module 11A"
+    },
+    {
+      "parameters": {
+        "jsCode": "const loadResult = $input.item.json;\n\nif (!loadResult.success) {\n  return loadResult;\n}\n\nconst connectors = loadResult.connectors || [];\nif (connectors.length === 0) {\n  return { success: false, error: 'registry_empty', trace_id: loadResult.trace_id };\n}\n\nconst metadata = $('Add Metadata').first()?.json;\nconst testMode = metadata?.test_mode || 'all';\nconst targetId = metadata?.connector_id;\nlet testTargets = [];\n\nif (testMode === 'single' && targetId) {\n  const connector = connectors.find(c => c.id === targetId);\n  if (connector) testTargets = [connector];\n} else {\n  const underTest = process.env.CONNECTOR_UNDER_TEST;\n  if (underTest) {\n    const connector = connectors.find(c => c.id === underTest);\n    if (connector) testTargets = [connector];\n  } else {\n    testTargets = connectors;\n  }\n}\n\nreturn {\n  test_targets: testTargets,\n  total_connectors: testTargets.length,\n  trace_id: loadResult.trace_id,\n  start_time: loadResult.start_time\n};"
+      },
+      "id": "c0791da3-5ebd-4f9c-bfdb-eac63733f31b",
       "name": "Load Test Targets",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [600, 300]
+      "position": [608, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Split connectors into separate test items\nconst testTargets = $input.item.json.test_targets;\nconst trace_id = $input.item.json.trace_id;\nconst start_time = $input.item.json.start_time;\nreturn testTargets.map(connector => ({ connector, trace_id, start_time }));"
+        "jsCode": "const testTargets = $input.item.json.test_targets || [];\nconst trace_id = $input.item.json.trace_id;\nconst start_time = $input.item.json.start_time;\nreturn testTargets.map(connector => ({ connector, trace_id, start_time }));"
       },
-      "id": "split-targets",
+      "id": "5bc0d2fe-37b4-49c7-9e64-d2414c3ffd85",
       "name": "Split Targets",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [800, 300]
+      "position": [800, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Test each connector across endpoints using helpers.httpRequest\nconst connector = $input.item.json.connector;\nconst endpoints = Object.keys(connector.endpoints || {});\nconst testResults = [];\n\nfor (const endpoint of endpoints) {\n  const testStart = Date.now();\n\n  // --- Mock test ---\n  let mockResult = {};\n  try {\n    const mockResponse = await this.helpers.httpRequest({\n      method: 'POST',\n      uri: `${process.env.N8N_BASE_URL}/webhook/connector-mock/mock-fetch`,\n      body: { connector_id: connector.id, endpoint },\n      json: true,\n      timeout: 5000\n    });\n    mockResult = { success: mockResponse.success !== false, duration_ms: Date.now() - testStart, source: 'mock' };\n  } catch (err) {\n    mockResult = { success: false, error: err.message, source: 'mock', duration_ms: Date.now() - testStart };\n  }\n\n  // --- Live test ---\n  let liveResult = null;\n  const mockModeGlobal = (process.env.MOCK_MODE_GLOBAL || 'false').toLowerCase() === 'true';\n  if (!mockModeGlobal) {\n    const liveStart = Date.now();\n    try {\n      const liveResponse = await this.helpers.httpRequest({\n        method: 'POST',\n        uri: `${process.env.N8N_BASE_URL}/webhook/connector/execute`,\n        body: { connector_id: connector.id, endpoint, payload: {} },\n        json: true,\n        timeout: parseInt(process.env.DEFAULT_TIMEOUT_MS || '10000')\n      });\n      liveResult = { success: liveResponse.success !== false, duration_ms: Date.now() - liveStart, source: 'live' };\n    } catch (err) {\n      liveResult = { success: false, error: err.message, source: 'live', duration_ms: Date.now() - liveStart };\n    }\n  }\n\n  testResults.push({ endpoint, mock: mockResult, live: liveResult, schema_check: 'skipped' });\n}\n\nconst totalTests = testResults.length * 2;\nconst passedTests = testResults.reduce((s, r) => s + (r.mock.success ? 1 : 0) + (r.live?.success ? 1 : 0), 0);\n\nreturn {\n  connector_id: connector.id,\n  connector_name: connector.name,\n  endpoints_tested: endpoints.length,\n  test_results: testResults,\n  tests_passed: passedTests,\n  tests_failed: totalTests - passedTests,\n  trace_id: $input.item.json.trace_id\n};"
+        "jsCode": "const connector = $input.item.json?.connector;\n\nif (!connector || !connector.id || !connector.endpoints) {\n  return {\n    connector_id: 'unknown',\n    connector_name: 'unknown',\n    endpoints_tested: 0,\n    test_results: [],\n    tests_passed: 0,\n    tests_failed: 0,\n    error: 'Invalid connector data',\n    trace_id: $input.item.json?.trace_id || 'unknown'\n  };\n}\n\nconst endpoints = Object.keys(connector.endpoints);\nconst testResults = [];\n\nconst baseUrl = process.env.N8N_BASE_URL || \"http://localhost:5678\";\nconst uuid11A = \"eae3109b-f891-42bb-9165-7c12aaeb9071\";\nconst uuid11B = \"365b6343-cc32-4ac8-837f-bde02317aa9a\";\n\nfor (const endpoint of endpoints) {\n\n  const mockStart = Date.now();\n  let mockResult = {};\n\n  try {\n    const mockResponse = await this.helpers.httpRequest({\n      method: 'POST',\n      url: `${baseUrl}/webhook/${uuid11B}/connector-mock/mock-fetch`,\n      body: { connector_id: connector.id, endpoint },\n      json: true,\n      timeout: 5000\n    });\n\n    mockResult = {\n      success: mockResponse.success !== false,\n      duration_ms: Date.now() - mockStart,\n      source: 'mock',\n      error: mockResponse.error || null\n    };\n\n  } catch (err) {\n    mockResult = {\n      success: false,\n      error: err.message,\n      source: 'mock',\n      duration_ms: Date.now() - mockStart\n    };\n  }\n\n  let liveResult = null;\n  const mockModeGlobal = (process.env.MOCK_MODE_GLOBAL || 'false').toLowerCase() === 'true';\n\n  if (!mockModeGlobal) {\n    const liveStart = Date.now();\n\n    try {\n      const liveResponse = await this.helpers.httpRequest({\n        method: 'POST',\n        url: `${baseUrl}/webhook/${uuid11A}/connector-manager/execute`,\n        body: {\n          connector_id: connector.id,\n          endpoint,\n          payload: {}\n        },\n        json: true,\n        timeout: parseInt(process.env.DEFAULT_TIMEOUT_MS || '10000')\n      });\n\n      liveResult = {\n        success: liveResponse.success !== false,\n        duration_ms: Date.now() - liveStart,\n        source: 'live',\n        error: liveResponse.error || null\n      };\n\n    } catch (err) {\n      liveResult = {\n        success: false,\n        error: err.message,\n        source: 'live',\n        duration_ms: Date.now() - liveStart\n      };\n    }\n  }\n\n  testResults.push({\n    endpoint,\n    mock: mockResult,\n    live: liveResult,\n    schema_check: \"skipped\"\n  });\n}\n\nconst totalTests = testResults.length * 2;\nconst passedTests = testResults.reduce(\n  (s, r) => s +\n    (r.mock.success ? 1 : 0) +\n    (r.live?.success ? 1 : 0),\n  0\n);\n\nreturn {\n  connector_id: connector.id,\n  connector_name: connector.name,\n  endpoints_tested: endpoints.length,\n  test_results: testResults,\n  tests_passed: passedTests,\n  tests_failed: totalTests - passedTests,\n  trace_id: $input.item.json?.trace_id || 'unknown'\n};"
       },
-      "id": "test-connector",
+      "id": "e1c81155-0b90-4ee5-884d-496eb396aee6",
       "name": "Test Connector",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1000, 300]
+      "position": [1008, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Aggregate results with latency metrics\nconst allResults = $input.all().map(i => i.json);\nconst firstItem = $input.first().json;\n\nconst totalConnectors = allResults.length;\nconst totalTests = allResults.reduce((sum, r) => sum + r.tests_passed + r.tests_failed, 0);\nconst totalPassed = allResults.reduce((sum, r) => sum + r.tests_passed, 0);\nconst totalFailed = allResults.reduce((sum, r) => sum + r.tests_failed, 0);\n\n// --- Latency metrics ---\nlet totalLatency = 0;\nlet totalEndpoints = 0;\nfor (const r of allResults) {\n  for (const t of r.test_results) {\n    if (t.mock?.duration_ms) {\n      totalLatency += t.mock.duration_ms;\n      totalEndpoints++;\n    }\n    if (t.live?.duration_ms) {\n      totalLatency += t.live.duration_ms;\n      totalEndpoints++;\n    }\n  }\n}\nconst avgLatency = totalEndpoints > 0 ? Math.round(totalLatency / totalEndpoints) : 0;\nconst duration = Date.now() - (firstItem.start_time || Date.now());\n\nconst summary = {\n  success: totalFailed === 0,\n  trace_id: firstItem.trace_id || 'unknown',\n  timestamp: new Date().toISOString(),\n  duration_ms: duration,\n  average_latency_ms: avgLatency,\n  total_connectors: totalConnectors,\n  total_tests: totalTests,\n  tests_passed: totalPassed,\n  tests_failed: totalFailed,\n  success_rate: ((totalPassed / totalTests) * 100).toFixed(1),\n  detailed_results: allResults\n};\n\nreturn summary;"
+        "jsCode": "const allResults = $input.all().map(i => i.json) || [];\nconst firstItem = $input.first()?.json || {};\n\nconst totalConnectors = allResults.length;\nconst totalTests = allResults.reduce((sum, r) => sum + (r.tests_passed || 0) + (r.tests_failed || 0), 0);\nconst totalPassed = allResults.reduce((sum, r) => sum + (r.tests_passed || 0), 0);\nconst totalFailed = allResults.reduce((sum, r) => sum + (r.tests_failed || 0), 0);\n\nlet totalLatency = 0;\nlet totalEndpoints = 0;\nfor (const r of allResults) {\n  for (const t of (r.test_results || [])) {\n    if (t.mock?.duration_ms) {\n      totalLatency += t.mock.duration_ms;\n      totalEndpoints++;\n    }\n    if (t.live?.duration_ms) {\n      totalLatency += t.live.duration_ms;\n      totalEndpoints++;\n    }\n  }\n}\nconst avgLatency = totalEndpoints > 0 ? Math.round(totalLatency / totalEndpoints) : 0;\nconst duration = Date.now() - (firstItem.start_time || Date.now());\n\nconst summary = {\n  success: totalFailed === 0,\n  trace_id: firstItem.trace_id || 'unknown',\n  timestamp: new Date().toISOString(),\n  duration_ms: duration,\n  average_latency_ms: avgLatency,\n  total_connectors: totalConnectors,\n  total_tests: totalTests,\n  tests_passed: totalPassed,\n  tests_failed: totalFailed,\n  success_rate: totalTests > 0 ? ((totalPassed / totalTests) * 100).toFixed(1) : '0.0',\n  detailed_results: allResults\n};\n\nreturn summary;"
       },
-      "id": "aggregate-results",
+      "id": "a7d52530-4199-4939-a3e7-0e728ac3c61b",
       "name": "Aggregate Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 300]
+      "position": [1200, 0]
     },
     {
       "parameters": {
-        "jsCode": "// Cache results to filesystem\nconst fs = require('fs');\nconst path = require('path');\nconst results = $input.item.json;\nconst cachePath = process.env.CACHE_PATH || '/data/Aigent_Modules_Core/cache';\n\nif (!fs.existsSync(cachePath)) fs.mkdirSync(cachePath, { recursive: true });\n\nconst cacheFile = path.join(cachePath, 'last_test_results.json');\nfs.writeFileSync(cacheFile, JSON.stringify(results, null, 2), 'utf8');\n\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\nconst historyFile = path.join(cachePath, `test_results_${timestamp}.json`);\nfs.writeFileSync(historyFile, JSON.stringify(results, null, 2), 'utf8');\n\nreturn { ...results, cache_status: 'written', cache_file: cacheFile, history_file: historyFile };"
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\nconst results = $input.item.json || {};\nconst cachePath = process.env.CACHE_PATH || '/data/Aigent_Modules_Core/cache';\n\nif (!fs.existsSync(cachePath)) {\n  fs.mkdirSync(cachePath, { recursive: true });\n}\n\nconst cacheFile = path.join(cachePath, 'last_test_results.json');\nfs.writeFileSync(cacheFile, JSON.stringify(results, null, 2), 'utf8');\n\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\nconst historyFile = path.join(cachePath, `test_results_${timestamp}.json`);\nfs.writeFileSync(historyFile, JSON.stringify(results, null, 2), 'utf8');\n\nreturn { ...results, cache_status: 'written', cache_file: cacheFile, history_file: historyFile };"
       },
-      "id": "cache-results",
+      "id": "f925d6e8-7e63-4cb4-ba8a-3e200d89c7fe",
       "name": "Cache Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1400, 300]
+      "position": [1408, 0]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ $json }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
-      "id": "return-success",
+      "id": "dad60ad8-3690-423b-af74-042182f4c6c2",
       "name": "Return Success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [1600, 300]
+      "position": [1600, 0]
     }
   ],
+  "pinData": {},
   "connections": {
-    "Webhook Trigger": { "main": [[{ "node": "Add Metadata" }]] },
-    "Add Metadata": { "main": [[{ "node": "Load Test Targets" }]] },
-    "Load Test Targets": { "main": [[{ "node": "Split Targets" }]] },
-    "Split Targets": { "main": [[{ "node": "Test Connector" }]] },
-    "Test Connector": { "main": [[{ "node": "Aggregate Results" }]] },
-    "Aggregate Results": { "main": [[{ "node": "Cache Results" }]] },
-    "Cache Results": { "main": [[{ "node": "Return Success" }]] }
+    "Webhook Trigger": {
+      "main": [[{"node": "Add Metadata", "type": "main", "index": 0}]]
+    },
+    "Add Metadata": {
+      "main": [[{"node": "Load Registry", "type": "main", "index": 0}]]
+    },
+    "Load Registry": {
+      "main": [[{"node": "Load Test Targets", "type": "main", "index": 0}]]
+    },
+    "Load Test Targets": {
+      "main": [[{"node": "Split Targets", "type": "main", "index": 0}]]
+    },
+    "Split Targets": {
+      "main": [[{"node": "Test Connector", "type": "main", "index": 0}]]
+    },
+    "Test Connector": {
+      "main": [[{"node": "Aggregate Results", "type": "main", "index": 0}]]
+    },
+    "Aggregate Results": {
+      "main": [[{"node": "Cache Results", "type": "main", "index": 0}]]
+    },
+    "Cache Results": {
+      "main": [[{"node": "Return Success", "type": "main", "index": 0}]]
+    }
   },
   "active": true,
-  "settings": { "executionOrder": "v1" }
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "CORRECTED-2025-11-15",
+  "meta": {
+    "instanceId": "183e7bedd90177ab2e69f3d391065562508191e95b18cfcc507609844c8be0cd"
+  },
+  "id": "vS03OCdkVuMeb1V2",
+  "tags": []
 }
