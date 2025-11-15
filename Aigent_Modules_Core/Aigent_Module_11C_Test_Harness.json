@@ -15,11 +15,11 @@
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1.1,
       "position": [200, 300],
-      "notes": "M11C: Automated connector testing"
+      "notes": "M11C: Automated connector testing - HARDENED"
     },
     {
       "parameters": {
-        "jsCode": "// Add metadata\nconst body = $input.item.json.body || {};\nconst trace_id = `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\nreturn {\n  test_mode: body.test_mode || 'all',\n  connector_id: body.connector_id || null,\n  trace_id,\n  timestamp: new Date().toISOString(),\n  start_time: Date.now()\n};"
+        "jsCode": "// M11C: Add metadata\nconst body = $input.item.json.body || {};\nconst trace_id = `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;\nreturn {\n  test_mode: body.test_mode || 'all',\n  connector_id: body.connector_id || null,\n  trace_id,\n  timestamp: new Date().toISOString(),\n  start_time: Date.now()\n};"
       },
       "id": "metadata",
       "name": "Add Metadata",
@@ -29,53 +29,58 @@
     },
     {
       "parameters": {
-        "jsCode": "// Load registry file\nconst fs = require('fs');\nconst registryPath = process.env.CONNECTOR_REGISTRY_PATH || '/data/Aigent_Modules_Core/connectors_registry.json';\nconst registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));\n\nconst testMode = $input.item.json.test_mode;\nconst targetId = $input.item.json.connector_id;\nlet testTargets = [];\n\nif (testMode === 'single' && targetId) {\n  const connector = registry.find(c => c.id === targetId);\n  if (connector) testTargets = [connector];\n} else {\n  const underTest = process.env.CONNECTOR_UNDER_TEST;\n  if (underTest) {\n    const connector = registry.find(c => c.id === underTest);\n    if (connector) testTargets = [connector];\n  } else {\n    testTargets = registry;\n  }\n}\nreturn {\n  test_targets: testTargets,\n  total_connectors: testTargets.length,\n  trace_id: $input.item.json.trace_id,\n  start_time: $input.item.json.start_time\n};"
+        "jsCode": "// M11C: Load registry file (HARDENED)\nconst fs = require('fs');\n\nconst registryPath = process.env.CONNECTOR_REGISTRY_PATH || \n  '/data/Aigent_Modules_Core/connectors_registry.json';\n\ntry {\n  if (!fs.existsSync(registryPath)) {\n    return {\n      success: false,\n      error: 'Registry file not found',\n      registry_path: registryPath,\n      trace_id: $input.item.json.trace_id\n    };\n  }\n  \n  const registryData = fs.readFileSync(registryPath, 'utf8');\n  const registry = JSON.parse(registryData);\n  \n  if (!Array.isArray(registry)) {\n    return {\n      success: false,\n      error: 'Registry is not an array',\n      registry_path: registryPath,\n      trace_id: $input.item.json.trace_id\n    };\n  }\n\n  const testMode = $input.item.json.test_mode;\n  const targetId = $input.item.json.connector_id;\n  let testTargets = [];\n\n  if (testMode === 'single' && targetId) {\n    const connector = registry.find(c => c?.id === targetId);\n    if (connector) {\n      testTargets = [connector];\n    } else {\n      return {\n        success: false,\n        error: 'Connector not found',\n        connector_id: targetId,\n        trace_id: $input.item.json.trace_id\n      };\n    }\n  } else {\n    const underTest = process.env.CONNECTOR_UNDER_TEST;\n    if (underTest) {\n      const connector = registry.find(c => c?.id === underTest);\n      if (connector) testTargets = [connector];\n    } else {\n      testTargets = registry;\n    }\n  }\n  \n  if (testTargets.length === 0) {\n    return {\n      success: false,\n      error: 'No test targets found',\n      test_mode: testMode,\n      trace_id: $input.item.json.trace_id\n    };\n  }\n  \n  return {\n    success: true,\n    test_targets: testTargets,\n    total_connectors: testTargets.length,\n    trace_id: $input.item.json.trace_id,\n    start_time: $input.item.json.start_time\n  };\n} catch (error) {\n  return {\n    success: false,\n    error: 'Failed to load registry',\n    error_message: error.message,\n    registry_path: registryPath,\n    trace_id: $input.item.json.trace_id\n  };\n}"
       },
       "id": "load-targets",
       "name": "Load Test Targets",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [600, 300]
+      "position": [600, 300],
+      "notes": "M11C: Load and filter test targets - HARDENED"
     },
     {
       "parameters": {
-        "jsCode": "// Split connectors into separate test items\nconst testTargets = $input.item.json.test_targets;\nconst trace_id = $input.item.json.trace_id;\nconst start_time = $input.item.json.start_time;\nreturn testTargets.map(connector => ({ connector, trace_id, start_time }));"
+        "jsCode": "// M11C: Split connectors into separate test items\nif (!$input.item.json.success) {\n  return $input.item.json;\n}\n\nconst testTargets = $input.item.json.test_targets || [];\nconst trace_id = $input.item.json.trace_id;\nconst start_time = $input.item.json.start_time;\n\nif (!Array.isArray(testTargets) || testTargets.length === 0) {\n  return {\n    success: false,\n    error: 'No test targets available',\n    trace_id: trace_id\n  };\n}\n\nreturn testTargets.map(connector => ({ \n  connector, \n  trace_id, \n  start_time \n}));"
       },
       "id": "split-targets",
       "name": "Split Targets",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [800, 300]
+      "position": [800, 300],
+      "notes": "M11C: Split into individual test items - HARDENED"
     },
     {
       "parameters": {
-        "jsCode": "// Test each connector across endpoints using helpers.httpRequest\nconst connector = $input.item.json.connector;\nconst endpoints = Object.keys(connector.endpoints || {});\nconst testResults = [];\n\nfor (const endpoint of endpoints) {\n  const testStart = Date.now();\n\n  // --- Mock test ---\n  let mockResult = {};\n  try {\n    const mockResponse = await this.helpers.httpRequest({\n      method: 'POST',\n      uri: `${process.env.N8N_BASE_URL}/webhook/connector-mock/mock-fetch`,\n      body: { connector_id: connector.id, endpoint },\n      json: true,\n      timeout: 5000\n    });\n    mockResult = { success: mockResponse.success !== false, duration_ms: Date.now() - testStart, source: 'mock' };\n  } catch (err) {\n    mockResult = { success: false, error: err.message, source: 'mock', duration_ms: Date.now() - testStart };\n  }\n\n  // --- Live test ---\n  let liveResult = null;\n  const mockModeGlobal = (process.env.MOCK_MODE_GLOBAL || 'false').toLowerCase() === 'true';\n  if (!mockModeGlobal) {\n    const liveStart = Date.now();\n    try {\n      const liveResponse = await this.helpers.httpRequest({\n        method: 'POST',\n        uri: `${process.env.N8N_BASE_URL}/webhook/connector/execute`,\n        body: { connector_id: connector.id, endpoint, payload: {} },\n        json: true,\n        timeout: parseInt(process.env.DEFAULT_TIMEOUT_MS || '10000')\n      });\n      liveResult = { success: liveResponse.success !== false, duration_ms: Date.now() - liveStart, source: 'live' };\n    } catch (err) {\n      liveResult = { success: false, error: err.message, source: 'live', duration_ms: Date.now() - liveStart };\n    }\n  }\n\n  testResults.push({ endpoint, mock: mockResult, live: liveResult, schema_check: 'skipped' });\n}\n\nconst totalTests = testResults.length * 2;\nconst passedTests = testResults.reduce((s, r) => s + (r.mock.success ? 1 : 0) + (r.live?.success ? 1 : 0), 0);\n\nreturn {\n  connector_id: connector.id,\n  connector_name: connector.name,\n  endpoints_tested: endpoints.length,\n  test_results: testResults,\n  tests_passed: passedTests,\n  tests_failed: totalTests - passedTests,\n  trace_id: $input.item.json.trace_id\n};"
+        "jsCode": "// M11C: Test each connector across endpoints (HARDENED)\nconst connector = $input.item.json.connector;\n\nif (!connector || !connector.id) {\n  return {\n    success: false,\n    error: 'Invalid connector data',\n    trace_id: $input.item.json.trace_id\n  };\n}\n\nconst endpoints = connector.endpoints ? Object.keys(connector.endpoints) : [];\nconst testResults = [];\n\n// Validate N8N_BASE_URL\nconst baseUrl = process.env.N8N_BASE_URL;\nif (!baseUrl) {\n  return {\n    success: false,\n    error: 'N8N_BASE_URL environment variable not set',\n    connector_id: connector.id,\n    trace_id: $input.item.json.trace_id\n  };\n}\n\nfor (const endpoint of endpoints) {\n  const testStart = Date.now();\n\n  // --- Mock test ---\n  let mockResult = {};\n  try {\n    const mockResponse = await this.helpers.httpRequest({\n      method: 'POST',\n      uri: `${baseUrl}/webhook/connector/mock-fetch`,\n      body: { connector_id: connector.id, endpoint },\n      json: true,\n      timeout: 5000\n    });\n    mockResult = { \n      success: mockResponse.success !== false, \n      duration_ms: Date.now() - testStart, \n      source: 'mock',\n      data: mockResponse.data || null\n    };\n  } catch (err) {\n    mockResult = { \n      success: false, \n      error: err.message || 'Mock test failed', \n      source: 'mock', \n      duration_ms: Date.now() - testStart \n    };\n  }\n\n  // --- Live test ---\n  let liveResult = null;\n  const mockModeGlobal = (process.env.MOCK_MODE_GLOBAL || 'false').toLowerCase() === 'true';\n  if (!mockModeGlobal) {\n    const liveStart = Date.now();\n    try {\n      const liveResponse = await this.helpers.httpRequest({\n        method: 'POST',\n        uri: `${baseUrl}/webhook/connector/execute`,\n        body: { connector_id: connector.id, endpoint, payload: {} },\n        json: true,\n        timeout: parseInt(process.env.DEFAULT_TIMEOUT_MS || '10000')\n      });\n      liveResult = { \n        success: liveResponse.success !== false, \n        duration_ms: Date.now() - liveStart, \n        source: 'live',\n        data: liveResponse.data || null\n      };\n    } catch (err) {\n      liveResult = { \n        success: false, \n        error: err.message || 'Live test failed', \n        source: 'live', \n        duration_ms: Date.now() - liveStart \n      };\n    }\n  }\n\n  testResults.push({ \n    endpoint, \n    mock: mockResult, \n    live: liveResult,\n    schema_check: 'skipped' \n  });\n}\n\nconst totalTests = testResults.reduce((sum, r) => {\n  return sum + (r.mock ? 1 : 0) + (r.live ? 1 : 0);\n}, 0);\n\nconst passedTests = testResults.reduce((sum, r) => {\n  return sum + (r.mock?.success ? 1 : 0) + (r.live?.success ? 1 : 0);\n}, 0);\n\nreturn {\n  connector_id: connector.id,\n  connector_name: connector.name || connector.id,\n  connector_type: connector.type || 'unknown',\n  endpoints_tested: endpoints.length,\n  test_results: testResults,\n  tests_passed: passedTests,\n  tests_failed: totalTests - passedTests,\n  trace_id: $input.item.json.trace_id\n};"
       },
       "id": "test-connector",
       "name": "Test Connector",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1000, 300]
+      "position": [1000, 300],
+      "notes": "M11C: Test connector endpoints - HARDENED with URL fix"
     },
     {
       "parameters": {
-        "jsCode": "// Aggregate results with latency metrics\nconst allResults = $input.all().map(i => i.json);\nconst firstItem = $input.first().json;\n\nconst totalConnectors = allResults.length;\nconst totalTests = allResults.reduce((sum, r) => sum + r.tests_passed + r.tests_failed, 0);\nconst totalPassed = allResults.reduce((sum, r) => sum + r.tests_passed, 0);\nconst totalFailed = allResults.reduce((sum, r) => sum + r.tests_failed, 0);\n\n// --- Latency metrics ---\nlet totalLatency = 0;\nlet totalEndpoints = 0;\nfor (const r of allResults) {\n  for (const t of r.test_results) {\n    if (t.mock?.duration_ms) {\n      totalLatency += t.mock.duration_ms;\n      totalEndpoints++;\n    }\n    if (t.live?.duration_ms) {\n      totalLatency += t.live.duration_ms;\n      totalEndpoints++;\n    }\n  }\n}\nconst avgLatency = totalEndpoints > 0 ? Math.round(totalLatency / totalEndpoints) : 0;\nconst duration = Date.now() - (firstItem.start_time || Date.now());\n\nconst summary = {\n  success: totalFailed === 0,\n  trace_id: firstItem.trace_id || 'unknown',\n  timestamp: new Date().toISOString(),\n  duration_ms: duration,\n  average_latency_ms: avgLatency,\n  total_connectors: totalConnectors,\n  total_tests: totalTests,\n  tests_passed: totalPassed,\n  tests_failed: totalFailed,\n  success_rate: ((totalPassed / totalTests) * 100).toFixed(1),\n  detailed_results: allResults\n};\n\nreturn summary;"
+        "jsCode": "// M11C: Aggregate results with latency metrics (HARDENED)\nconst allItems = $input.all();\n\nif (!allItems || allItems.length === 0) {\n  return {\n    success: false,\n    error: 'No test results to aggregate',\n    timestamp: new Date().toISOString()\n  };\n}\n\nconst allResults = allItems.map(i => i.json).filter(j => j && j.connector_id);\nconst firstItem = allItems[0].json;\n\nconst totalConnectors = allResults.length;\nconst totalTests = allResults.reduce((sum, r) => sum + (r.tests_passed || 0) + (r.tests_failed || 0), 0);\nconst totalPassed = allResults.reduce((sum, r) => sum + (r.tests_passed || 0), 0);\nconst totalFailed = allResults.reduce((sum, r) => sum + (r.tests_failed || 0), 0);\n\n// --- Latency metrics ---\nlet totalLatency = 0;\nlet totalEndpoints = 0;\nfor (const r of allResults) {\n  if (r.test_results && Array.isArray(r.test_results)) {\n    for (const t of r.test_results) {\n      if (t.mock?.duration_ms) {\n        totalLatency += t.mock.duration_ms;\n        totalEndpoints++;\n      }\n      if (t.live?.duration_ms) {\n        totalLatency += t.live.duration_ms;\n        totalEndpoints++;\n      }\n    }\n  }\n}\nconst avgLatency = totalEndpoints > 0 ? Math.round(totalLatency / totalEndpoints) : 0;\nconst duration = Date.now() - (firstItem.start_time || Date.now());\n\nconst successRate = totalTests > 0 \n  ? ((totalPassed / totalTests) * 100).toFixed(1) \n  : '0.0';\n\nconst summary = {\n  success: totalFailed === 0 && totalTests > 0,\n  trace_id: firstItem.trace_id || 'unknown',\n  timestamp: new Date().toISOString(),\n  duration_ms: duration,\n  average_latency_ms: avgLatency,\n  total_connectors: totalConnectors,\n  total_tests: totalTests,\n  tests_passed: totalPassed,\n  tests_failed: totalFailed,\n  success_rate: successRate,\n  detailed_results: allResults\n};\n\nreturn summary;"
       },
       "id": "aggregate-results",
       "name": "Aggregate Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 300]
+      "position": [1200, 300],
+      "notes": "M11C: Aggregate test results - HARDENED with division by zero fix"
     },
     {
       "parameters": {
-        "jsCode": "// Cache results to filesystem\nconst fs = require('fs');\nconst path = require('path');\nconst results = $input.item.json;\nconst cachePath = process.env.CACHE_PATH || '/data/Aigent_Modules_Core/cache';\n\nif (!fs.existsSync(cachePath)) fs.mkdirSync(cachePath, { recursive: true });\n\nconst cacheFile = path.join(cachePath, 'last_test_results.json');\nfs.writeFileSync(cacheFile, JSON.stringify(results, null, 2), 'utf8');\n\nconst timestamp = new Date().toISOString().replace(/[:.]/g, '-');\nconst historyFile = path.join(cachePath, `test_results_${timestamp}.json`);\nfs.writeFileSync(historyFile, JSON.stringify(results, null, 2), 'utf8');\n\nreturn { ...results, cache_status: 'written', cache_file: cacheFile, history_file: historyFile };"
+        "jsCode": "// M11C: Cache results to filesystem (HARDENED)\nconst fs = require('fs');\nconst path = require('path');\nconst results = $input.item.json;\n\nconst cachePath = process.env.CACHE_PATH || '/data/Aigent_Modules_Core/cache';\n\ntry {\n  if (!fs.existsSync(cachePath)) {\n    fs.mkdirSync(cachePath, { recursive: true });\n  }\n\n  const cacheFile = path.join(cachePath, 'last_test_results.json');\n  fs.writeFileSync(cacheFile, JSON.stringify(results, null, 2), 'utf8');\n\n  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');\n  const historyFile = path.join(cachePath, `test_results_${timestamp}.json`);\n  fs.writeFileSync(historyFile, JSON.stringify(results, null, 2), 'utf8');\n\n  return { \n    ...results, \n    cache_status: 'written', \n    cache_file: cacheFile, \n    history_file: historyFile \n  };\n} catch (error) {\n  return { \n    ...results, \n    cache_status: 'failed', \n    cache_error: error.message \n  };\n}"
       },
       "id": "cache-results",
       "name": "Cache Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1400, 300]
+      "position": [1400, 300],
+      "notes": "M11C: Cache test results - HARDENED with error handling"
     },
     {
       "parameters": {
@@ -100,5 +105,66 @@
     "Cache Results": { "main": [[{ "node": "Return Success" }]] }
   },
   "active": true,
-  "settings": { "executionOrder": "v1" }
+  "settings": { "executionOrder": "v1" },
+  "tags": [
+    {
+      "id": "aigent-core",
+      "name": "Aigent-Core"
+    },
+    {
+      "id": "module-11",
+      "name": "Module-11"
+    },
+    {
+      "id": "test-harness",
+      "name": "Test-Harness"
+    },
+    {
+      "id": "hardened-v2",
+      "name": "Hardened-v2"
+    }
+  ],
+  "meta": {
+    "version": "2.0.0",
+    "branch": "Core",
+    "description": "Module 11C: Test Harness - HARDENED for n8n v1.118.2 import stability",
+    "operations": [
+      "Test all connectors or single connector",
+      "Mock and live endpoint testing",
+      "Latency and success rate metrics",
+      "Result caching to filesystem"
+    ],
+    "required_vars": [
+      "N8N_BASE_URL (required for calling 11A and 11B)"
+    ],
+    "recommended_vars": [
+      "CONNECTOR_REGISTRY_PATH (default: /data/Aigent_Modules_Core/connectors_registry.json)",
+      "CACHE_PATH (default: /data/Aigent_Modules_Core/cache)"
+    ],
+    "optional_vars": [
+      "CONNECTOR_UNDER_TEST (test single connector)",
+      "MOCK_MODE_GLOBAL (skip live tests if true)",
+      "DEFAULT_TIMEOUT_MS (default: 10000)",
+      "ALLOWED_ORIGINS (CORS configuration)"
+    ],
+    "features": [
+      "Automated connector testing",
+      "Mock and live mode testing",
+      "Endpoint coverage reporting",
+      "Latency metrics",
+      "Success rate calculation",
+      "Historical result caching"
+    ],
+    "hardening": [
+      "✅ No conditional nodes (linear workflow - no import risk)",
+      "✅ Fixed webhook URL path (was /connector-mock/, now /connector/)",
+      "✅ Comprehensive null/undefined guards",
+      "✅ N8N_BASE_URL validation",
+      "✅ Array validation before operations",
+      "✅ Division by zero handling",
+      "✅ Filesystem error handling",
+      "✅ Enhanced error messages",
+      "✅ Uses helpers.httpRequest (not axios)"
+    ]
+  }
 }
